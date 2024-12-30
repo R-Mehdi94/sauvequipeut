@@ -1,8 +1,10 @@
 [workspace]
 members = [
     "client",
-    "server"
+    "server",
+    "common",
 ]
+
 resolver = "2"
 
 [workspace.dependencies]

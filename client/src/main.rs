@@ -1,9 +1,9 @@
-mod json_message;
+mod utils;
 
-use crate::json_message::{Message, RegisterTeam};
-use std::env;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use crate::utils::connect_to_server;
+use common::message::MessageData;
+use common::state::ClientState;
+use common::utils::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     /*let args: Vec<String> = env::args().collect();
@@ -29,82 +29,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    loop {
-        let message = build_message();
-        send_message(&mut stream, &message)?;
+    let mut state = ClientState::default();
 
-        let response = receive_response(&mut stream)?;
-        let message = process_message(response)?;
+    let message = build_message(MessageData::RegisterTeam {
+        name: "curious_broccoli".to_string(),
+    })?;
 
-        println!("{:#?}", message);
+    if let Err(e) = send_message(&mut stream, &message) {
+        eprintln!("Erreur critique lors de l'envoi du message : {}", e);
+        return Err(e);
     }
-}
 
-fn connect_to_server(addr: &str, port: &str) -> Result<TcpStream, Box<dyn std::error::Error>> {
-    let full_addr = format!("{}:{}", addr, port);
-    for _ in 0..3 {
-        match TcpStream::connect(&full_addr) {
-            Ok(stream) => return Ok(stream),
-            Err(e) => eprintln!("Erreur de connexion : {}. Nouvelle tentative...", e),
-        }
-        std::thread::sleep(std::time::Duration::from_secs(2)); //2 seconde
-    }
-    Err(
-        "Impossible de se connecter au serveur après plusieurs tentatives"
-            .to_string()
-            .into(),
-    )
-}
-
-fn build_message() -> Message {
-    Message::RegisterTeam(RegisterTeam {
-        name: "test team".to_string(),
-    })
-}
-
-fn send_message(
-    stream: &mut TcpStream,
-    message: &Message,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let json_message = serde_json::to_string(message).expect("Failed to serialize message");
-    println!("Envoi du message : {}", json_message);
-
-    let size = json_message.len() as u32;
-    stream.write(&size.to_le_bytes())?;
-
-    stream.write(json_message.as_bytes())?;
-    Ok(())
-}
-
-fn receive_response(stream: &mut TcpStream) -> Result<Message, Box<dyn std::error::Error>> {
-    let mut size_buffer = [0_u8; 4];
-    stream.read_exact(&mut size_buffer)?;
-    let response_size = u32::from_le_bytes(size_buffer) as usize;
-
-    let mut response_buffer = vec![0u8; response_size];
-    stream.read_exact(&mut response_buffer)?;
-
-    let response: Message = serde_json::from_slice(&response_buffer)?;
-    Ok(response)
-}
-
-fn process_message(mut message: Message) -> Result<(), Box<dyn std::error::Error>> {
-    match message {
-        Message::RegisterTeamResult(result) => {
-            if let Some(success) = result.Ok {
-                println!(
-                    "Enregistrement réussi ! Joueurs attendus : {}, Token : {}",
-                    success.expected_players, success.registration_token
-                );
-            } else if let Some(error) = result.Err {
-                return Err(format!("Erreur lors de l'enregistrement : {}", error).into());
-            } else {
-                return Err("Réponse inattendue dans RegisterTeamResult".into());
+    match receive_response(&mut stream) {
+        Ok(response) => {
+            if let Err(e) = process_message(response, &mut state) {
+                eprintln!("Erreur Critique lors du traitement du message : {}", e);
+                return Err(e);
             }
         }
-        _ => {
-            return Err("Réponse inattendue !".into());
+        Err(e) => {
+            eprintln!("Erreur critique lors de la réception : {}", e);
+            return Err(e);
         }
+    };
+
+    let (expected_players, token) = if let Some(team_info) = &state.team_info {
+        (
+            team_info.expected_players.clone(),
+            team_info.registration_token.clone(),
+        )
+    } else {
+        println!("No team info available.");
+        return Ok(());
+    };
+
+    for _ in 0..expected_players {
+        stream = connect_to_server(addr, port)?;
+
+        let mut line = String::new();
+        println!("Enter your name :");
+        std::io::stdin().read_line(&mut line)?;
+        let user = line.trim();
+
+        let message = build_message(MessageData::SubscribePlayer {
+            name: user.to_string(),
+            registration_token: token.clone(),
+        })?;
+
+        if let Err(e) = send_message(&mut stream, &message) {
+            eprintln!("Erreur critique lors de l'envoi du message : {}", e);
+            return Err(e);
+        }
+
+        match receive_response(&mut stream) {
+            Ok(response) => {
+                if let Err(e) = process_message(response, &mut state) {
+                    eprintln!("Erreur Critique lors du traitement du message : {}", e);
+                    return Err(e);
+                }
+            }
+            Err(e) => {
+                eprintln!("Erreur critique lors de la réception : {}", e);
+                return Err(e);
+            }
+        };
     }
 
     Ok(())
