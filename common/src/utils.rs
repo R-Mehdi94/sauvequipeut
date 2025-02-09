@@ -1,9 +1,32 @@
 use crate::message::{Message, MessageData, RegisterTeam, SubscribePlayer, SubscribePlayerResult};
 use crate::state::ClientState;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 
-pub fn build_message(data: MessageData) -> Result<Message, Box<dyn std::error::Error>> {
+#[derive(Debug)]
+pub enum MyError {
+    Io(std::io::Error),      // Pour les erreurs liées à l'entrée/sortie
+    Json(serde_json::Error), // Ajout d'une variante pour les erreurs JSON
+    Other(String),           // Pour des erreurs personnalisées
+}
+
+impl From<String> for MyError {
+    fn from(err: String) -> Self {
+        MyError::Other(err)
+    }
+}
+impl From<std::io::Error> for MyError {
+    fn from(err: std::io::Error) -> Self {
+        MyError::Io(err)
+    }
+}
+
+impl From<serde_json::Error> for MyError {
+    fn from(err: serde_json::Error) -> Self {
+        MyError::Json(err)
+    }
+}
+pub fn build_message(data: MessageData) -> Result<Message, MyError> {
     match data {
         MessageData::RegisterTeam { name } => Ok(Message::RegisterTeam(RegisterTeam { name })),
         MessageData::SubscribePlayer {
@@ -20,36 +43,36 @@ pub fn build_message(data: MessageData) -> Result<Message, Box<dyn std::error::E
     }
 }
 
-pub fn send_message(
-    stream: &mut TcpStream,
-    message: &Message,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let json_message = serde_json::to_string(message).expect("Failed to serialize message");
-    println!("Envoi du message : {}", json_message);
+pub fn send_message(stream: &mut TcpStream, message: &Message) -> Result<(), MyError> {
+    let json_message = serde_json::to_string(message)?;
+    println!("[DEBUG] Envoi du message : {}", json_message);
 
     let size = json_message.len() as u32;
-    stream.write(&size.to_le_bytes())?;
+    stream.write_all(&size.to_le_bytes())?;
+    println!("[DEBUG] Taille du message envoyée : {}", size);
 
-    stream.write(json_message.as_bytes())?;
+    stream.write_all(json_message.as_bytes())?;
+    println!("[DEBUG] Message envoyé avec succès.");
+
     Ok(())
 }
 
-pub fn receive_response(stream: &mut TcpStream) -> Result<Message, Box<dyn std::error::Error>> {
+pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
     let mut size_buffer = [0_u8; 4];
     stream.read_exact(&mut size_buffer)?;
+    let test = is_connection_closed_with_peek(stream);
+
     let response_size = u32::from_le_bytes(size_buffer) as usize;
 
     let mut response_buffer = vec![0u8; response_size];
     stream.read_exact(&mut response_buffer)?;
+    let test2 = is_connection_closed_with_peek(stream);
 
     let response: Message = serde_json::from_slice(&response_buffer)?;
     Ok(response)
 }
 
-pub fn process_message(
-    message: Message,
-    state: &mut ClientState,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn process_message(message: Message, state: &mut ClientState) -> Result<(), MyError> {
     match message {
         Message::RegisterTeamResult(result) => {
             if let Some(success) = result.Ok {
@@ -62,7 +85,9 @@ pub fn process_message(
                 println!("Erreur lors de l'enregistrement : {}", error);
                 return Err(format!("Erreur lors de l'enregistrement : {}", error).into());
             } else {
-                return Err("Réponse inattendue dans RegisterTeamResult".into());
+                return Err("Réponse inattendue dans RegisterTeamResult"
+                    .to_string()
+                    .into());
             }
         }
         Message::SubscribePlayerResult(result) => match result {
@@ -78,4 +103,39 @@ pub fn process_message(
     }
 
     Ok(())
+}
+
+pub fn handle_response(stream: &mut TcpStream, state: &mut ClientState) -> Result<(), MyError> {
+    let response = receive_response(stream)?;
+    process_message(response, state)?;
+
+    Ok(())
+}
+
+pub fn is_connection_closed_with_peek(stream: &mut TcpStream) -> bool {
+    let mut buffer = [0; 1];
+    match stream.peek(&mut buffer) {
+        Ok(0) => {
+            // Si 0 octets sont disponibles, cela signifie que la connexion est fermée.
+            println!("La connexion est fermée (EOF).");
+            true
+        }
+        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+            // La connexion est non-bloquante et il n'y a pas encore de données.
+            println!("La connexion est toujours ouverte.");
+            false
+        }
+        Err(ref e) if e.kind() == ErrorKind::ConnectionReset => {
+            println!("La connexion a été réinitialisée.");
+            true
+        }
+        Err(e) => {
+            println!("Erreur inattendue lors du peek : {:?}", e);
+            true
+        }
+        Ok(_) => {
+            // Des données sont disponibles, donc la connexion est toujours ouverte.
+            false
+        }
+    }
 }

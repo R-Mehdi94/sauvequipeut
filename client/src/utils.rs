@@ -1,17 +1,16 @@
-use std::net::TcpStream;
+use common::utils::MyError;
+use std::{net::TcpStream, thread, time};
 
-pub fn connect_to_server(addr: &str, port: &str) -> Result<TcpStream, Box<dyn std::error::Error>> {
+pub fn connect_to_server(addr: &str, port: &str) -> Result<TcpStream, MyError> {
     let full_addr = format!("{}:{}", addr, port);
     for _ in 0..3 {
         match TcpStream::connect(&full_addr) {
             Ok(stream) => return Ok(stream),
             Err(e) => eprintln!("Erreur de connexion : {}. Nouvelle tentative...", e),
         }
-        std::thread::sleep(std::time::Duration::from_secs(2)); //2 seconde
+        thread::sleep(time::Duration::from_secs(2)); //2 secondes
     }
-    Err(
-        "Impossible de se connecter au serveur après plusieurs tentatives"
-            .to_string()
-            .into(),
-    )
+    Err(MyError::Other(
+        "Impossible de se connecter au serveur après plusieurs tentatives".to_string(),
+    ))
 }
