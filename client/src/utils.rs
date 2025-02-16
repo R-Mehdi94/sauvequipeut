@@ -1,4 +1,4 @@
-use common::utils::MyError;
+use common::utils::my_error::MyError;
 use std::{net::TcpStream, thread, time};
 
 pub fn connect_to_server(addr: &str, port: &str) -> Result<TcpStream, MyError> {

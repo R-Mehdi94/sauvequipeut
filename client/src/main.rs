@@ -1,43 +1,29 @@
+mod decrypte;
+mod player;
 mod utils;
 
+use crate::player::handle_player;
 use crate::utils::connect_to_server;
 use common::message::MessageData;
 use common::state::ClientState;
-use common::utils::*;
-use std::error::Error;
+use common::utils::my_error::MyError;
+use common::utils::utils::*;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 fn main() -> Result<(), MyError> {
-    /*let args: Vec<String> = env::args().collect();
-
-    if args.len() < 2 {
-        eprintln!("Usage: client [server_address]");
-        return Ok(());
-    }
-
-    let addr = &args[1];*/
-
+    println!("Hello, world!");
     let addr = "localhost";
     let port = "8778";
 
-    let mut stream = match connect_to_server(addr, port) {
-        Ok(s) => s,
-        Err(e) => {
-            let context = format!("Erreur critique lors de la connexion à {}:{}", addr, port);
-            return Err(MyError::Other(format!("{}: {:?}", context, e)));
-        }
-    };
+    let mut stream = connect_to_server(addr, port)?;
 
     let mut state = ClientState::default();
 
-    let message = build_message(MessageData::RegisterTeam {
-        name: "curious_broccoli".to_string(),
-    })?;
+    let team_name = "curious_broccoli".to_string();
+    let message = build_message(MessageData::RegisterTeam { name: team_name })?;
 
-    if let Err(e) = send_message(&mut stream, &message) {
-        eprintln!("Erreur critique lors de l'envoi du message : {:?}", e);
-        return Err(e);
-    }
-
+    send_message(&mut stream, &message)?;
     handle_response(&mut stream, &mut state)?;
 
     let (expected_players, token) = if let Some(team_info) = &state.team_info {
@@ -46,40 +32,26 @@ fn main() -> Result<(), MyError> {
             team_info.registration_token.clone(),
         )
     } else {
-        println!("No team info available.");
+        println!("Erreur : aucune information d'équipe disponible.");
         return Ok(());
     };
 
-    let player = {
-        let expected_players = expected_players.clone();
-        let mut count = 0u32;
+    let subscribed_players = Arc::new(Mutex::new(Vec::new()));
+
+    for i in 0..expected_players {
         let token = token.clone();
-        std::thread::spawn(move || loop {
-            count += 1;
-            if count > expected_players {
-                return Ok(());
+        let subscribed_players = Arc::clone(&subscribed_players); // Partage sécurisé entre threads des joueurs
+        let addr = addr.to_string();
+        let port = port.to_string();
+
+        thread::spawn(move || {
+            if let Err(e) = handle_player(i, token, subscribed_players, &addr, &port) {
+                eprintln!("Erreur avec le joueur {} : {:?}", i, e);
             }
-            stream = connect_to_server(addr, port)?;
-            let mut line = String::new();
-            println!("Enter your name :");
-            std::io::stdin().read_line(&mut line)?;
-            let user = line.trim();
+        });
+    }
 
-            let message = build_message(MessageData::SubscribePlayer {
-                name: user.to_string(),
-                registration_token: token.clone(),
-            })?;
-
-            if let Err(e) = send_message(&mut stream, &message) {
-                eprintln!("Erreur critique lors de l'envoi du message : {:?}", e);
-                return Err(e);
-            };
-
-            handle_response(&mut stream, &mut state)?;
-        })
-    };
-
-    player.join().unwrap()?;
-
-    Ok(())
+    loop {
+        thread::sleep(std::time::Duration::from_secs(1));
+    }
 }

@@ -13,10 +13,10 @@ pub enum MessageData {
         name: String,
         registration_token: String,
     },
-    RadarView(String),
     Hint(HintData),
     Action(ActionData),
     Challenge(ChallengeData),
+    RadarView(String),
 }
 
 #[derive(Serialize, Deserialize)]
