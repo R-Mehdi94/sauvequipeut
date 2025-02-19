@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-pub enum RadarView {
-    RadarView(String),
+pub struct RadarViewResult {
+    radar_view_result: String,
 }

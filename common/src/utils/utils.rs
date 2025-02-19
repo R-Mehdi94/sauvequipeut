@@ -1,7 +1,8 @@
-use crate::message::MessageData::RadarView;
+use crate::message::Message::RadarViewResult;
 use crate::message::{Message, MessageData, RegisterTeam, SubscribePlayer, SubscribePlayerResult};
 use crate::state::ClientState;
 use crate::utils::my_error::MyError;
+use serde::de::Unexpected::Option;
 use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 
@@ -15,7 +16,7 @@ pub fn build_message(data: MessageData) -> Result<Message, MyError> {
             name,
             registration_token,
         })),
-        MessageData::RadarView(encoded_data) => Ok(Message::RadarView(encoded_data)),
+        MessageData::RadarViewResult(encoded_data) => Ok(Message::RadarViewResult(encoded_data)),
         MessageData::Hint(hint) => Ok(Message::Hint(hint)),
         MessageData::Action(action) => Ok(Message::Action(action)),
         MessageData::Challenge(challenge) => Ok(Message::Challenge(challenge)),
@@ -24,15 +25,11 @@ pub fn build_message(data: MessageData) -> Result<Message, MyError> {
 
 pub fn send_message(stream: &mut TcpStream, message: &Message) -> Result<(), MyError> {
     let json_message = serde_json::to_string(message)?;
-    println!("[DEBUG] Envoi du message : {}", json_message);
 
     let size = json_message.len() as u32;
     stream.write_all(&size.to_le_bytes())?;
 
-    println!("[DEBUG] Taille du message envoyée : {}", size);
-
     stream.write_all(json_message.as_bytes())?;
-    println!("[DEBUG] Message envoyé avec succès.");
 
     Ok(())
 }
@@ -43,6 +40,15 @@ pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
     let response_size = u32::from_le_bytes(size_buffer) as usize;
     let mut response_buffer = vec![0u8; response_size];
     stream.read_exact(&mut response_buffer)?;
+    let mut raw_message: serde_json::Value = serde_json::from_slice(&response_buffer)?;
+    if let Some(radar_view) = raw_message.get("RadarView") {
+        if radar_view.is_string() {
+            // Si "RadarView" est une chaîne, crée le message approprié
+            let response = Message::RadarViewResult(radar_view.as_str().unwrap().to_string());
+            return Ok(response);
+        }
+    }
+
     let response: Message = serde_json::from_slice(&response_buffer)?;
     Ok(response)
 }
@@ -74,11 +80,9 @@ pub fn process_message(message: Message, state: &mut ClientState) -> Result<(), 
                 return Err(format!("Erreur lors de la souscription : {}", error).into());
             }
         },
-        Message::RadarView(result) => match result {
-            radarView => {
-                println!("{}", radarView);
-            }
-        },
+        Message::RadarViewResult(result) => {
+            state.radar_view = Some(result);
+        }
         _ => println!("Message inattendu !"),
     }
 

@@ -2,7 +2,7 @@ mod decrypte;
 mod player;
 mod utils;
 
-use crate::player::handle_player;
+use crate::player::{handle_player, move_player};
 use crate::utils::connect_to_server;
 use common::message::MessageData;
 use common::state::ClientState;
@@ -44,11 +44,13 @@ fn main() -> Result<(), MyError> {
         let addr = addr.to_string();
         let port = port.to_string();
 
-        thread::spawn(move || {
-            if let Err(e) = handle_player(i, token, subscribed_players, &addr, &port) {
-                eprintln!("Erreur avec le joueur {} : {:?}", i, e);
+        let play = thread::spawn(move || {
+            handle_player(i, token, &subscribed_players, &addr, &port);
+            for player in subscribed_players.lock().unwrap().iter_mut() {
+                move_player(player)
             }
         });
+        play.join().unwrap();
     }
 
     loop {

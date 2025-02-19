@@ -1,7 +1,8 @@
 use crate::utils::connect_to_server;
-use common::message::MessageData;
+use common::message::actiondata::ActionData;
+use common::message::relativedirection::RelativeDirection;
+use common::message::{Message, MessageData};
 use common::state::ClientState;
-use common::utils::my_error::MyError;
 use common::utils::utils::{build_message, handle_response, send_message};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -15,21 +16,23 @@ pub struct Player {
 pub fn handle_player(
     player_id: u32,
     token: String,
-    subscribed_players: Arc<Mutex<Vec<Player>>>,
+    subscribed_players: &Arc<Mutex<Vec<Player>>>,
     addr: &str,
     port: &str,
-) -> Result<(), MyError> {
-    let stream = connect_to_server(addr, port)?;
+) {
+    let stream = connect_to_server(addr, port).unwrap();
     println!("Joueur {} connecté.", player_id);
 
     let player_name = format!("Player_{}", player_id);
     let subscribe_message = build_message(MessageData::SubscribePlayer {
         name: player_name.clone(),
         registration_token: token.clone(),
-    })?;
+    })
+    .unwrap();
 
-    let mut player_stream = stream.try_clone()?;
-    send_message(&mut player_stream, &subscribe_message)?;
+    let mut player_stream = stream.try_clone().unwrap();
+    send_message(&mut player_stream, &subscribe_message).unwrap();
+    handle_response(&mut player_stream, &mut ClientState::default()).unwrap();
 
     // Ajouter le joueur à la liste partagée
     {
@@ -37,12 +40,23 @@ pub fn handle_player(
         players.push(Player {
             name: player_name.clone(),
             registration_token: token.clone(),
-            stream: player_stream.try_clone()?,
-        });
+            stream: player_stream.try_clone().unwrap(),
+        })
     }
+}
 
-    // Boucle pour gérer les messages du serveur
+pub fn move_player(player: &mut Player) {
     loop {
-        handle_response(&mut player_stream, &mut ClientState::default())?;
+        println!("Player {} move.", player.name);
+        send_message(
+            &mut player.stream,
+            &Message::Action(ActionData::MoveTo(RelativeDirection::Right)),
+        )
+        .unwrap();
+        send_message(
+            &mut player.stream,
+            &Message::Action(ActionData::MoveTo(RelativeDirection::Left)),
+        )
+        .unwrap();
     }
 }

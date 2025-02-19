@@ -4,4 +4,5 @@ use crate::message::{RegisterTeamSuccess, SubscribePlayer};
 pub struct ClientState {
     pub team_info: Option<RegisterTeamSuccess>,
     pub subscribed_players: Vec<SubscribePlayer>,
+    pub radar_view: Option<String>,
 }
