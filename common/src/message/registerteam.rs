@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RegisterTeam {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct RegisterTeamResult {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RegisdterTeamResult {
     pub Ok: Option<RegisterTeamSuccess>,
     pub Err: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RegisterTeamSuccess {
     pub expected_players: u32,
     pub registration_token: String,

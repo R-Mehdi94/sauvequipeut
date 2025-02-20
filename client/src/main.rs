@@ -1,18 +1,19 @@
-mod decrypte;
 mod player;
 mod utils;
 
-use crate::player::{handle_player, move_player};
+use crate::player::handle_player;
 use crate::utils::connect_to_server;
+use common::message::actiondata::PlayerAction;
 use common::message::MessageData;
 use common::state::ClientState;
 use common::utils::my_error::MyError;
 use common::utils::utils::*;
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 fn main() -> Result<(), MyError> {
-    println!("Hello, world!");
+    println!("Démarrage du client...");
     let addr = "localhost";
     let port = "8778";
 
@@ -28,7 +29,7 @@ fn main() -> Result<(), MyError> {
 
     let (expected_players, token) = if let Some(team_info) = &state.team_info {
         (
-            team_info.expected_players.clone(),
+            team_info.expected_players,
             team_info.registration_token.clone(),
         )
     } else {
@@ -36,24 +37,44 @@ fn main() -> Result<(), MyError> {
         return Ok(());
     };
 
-    let subscribed_players = Arc::new(Mutex::new(Vec::new()));
+    let players = Arc::new(Mutex::new(Vec::new()));
+    let (tx, rx) = channel();
 
-    for i in 0..expected_players {
-        let token = token.clone();
-        let subscribed_players = Arc::clone(&subscribed_players); // Partage sécurisé entre threads des joueurs
-        let addr = addr.to_string();
-        let port = port.to_string();
+    let player_threads: Vec<_> = (0..expected_players)
+        .map(|i| {
+            let players = Arc::clone(&players);
+            let tx = tx.clone();
+            let token = token.clone();
+            let addr = addr.to_string();
+            let port = port.to_string();
 
-        let play = thread::spawn(move || {
-            handle_player(i, token, &subscribed_players, &addr, &port);
-            for player in subscribed_players.lock().unwrap().iter_mut() {
-                move_player(player)
-            }
-        });
-        play.join().unwrap();
+            thread::spawn(move || {
+                handle_player(i, token, &players, &addr, &port, tx);
+            })
+        })
+        .collect();
+
+    let coordinator_thread = thread::spawn(move || {
+        game_coordinator(rx, expected_players);
+    });
+
+    for handle in player_threads {
+        handle.join().unwrap();
     }
 
-    loop {
-        thread::sleep(std::time::Duration::from_secs(1));
+    coordinator_thread.join().unwrap();
+
+    Ok(())
+}
+
+fn game_coordinator(rx: Receiver<PlayerAction>, player_count: u32) {
+    let mut active_players = player_count;
+
+    while active_players > 0 {
+        if let Ok(action) = rx.recv() {
+            println!("Joueur {} action: {:?}", action.player_id, action.action);
+        }
     }
+
+    println!("Tous les joueurs ont terminé");
 }

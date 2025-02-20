@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum RelativeDirection {
     Left,
     Right,
-    Forward,
-    Backward,
+    Front,
+    Back,
 }

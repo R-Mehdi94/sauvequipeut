@@ -1,10 +1,13 @@
 use crate::utils::connect_to_server;
-use common::message::actiondata::ActionData;
+use common::message::actiondata::{ActionData, PlayerAction};
 use common::message::relativedirection::RelativeDirection;
+use std::net::TcpStream;
+
 use common::message::{Message, MessageData};
 use common::state::ClientState;
-use common::utils::utils::{build_message, handle_response, send_message};
-use std::net::TcpStream;
+use common::utils::utils::{build_message, handle_response, receive_response, send_message};
+use rand::Rng;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 pub struct Player {
@@ -16,47 +19,58 @@ pub struct Player {
 pub fn handle_player(
     player_id: u32,
     token: String,
-    subscribed_players: &Arc<Mutex<Vec<Player>>>,
+    players: &Arc<Mutex<Vec<Player>>>,
     addr: &str,
     port: &str,
+    tx: Sender<PlayerAction>,
 ) {
-    let stream = connect_to_server(addr, port).unwrap();
-    println!("Joueur {} connecté.", player_id);
-
+    let mut stream = connect_to_server(addr, port).unwrap();
     let player_name = format!("Player_{}", player_id);
+
     let subscribe_message = build_message(MessageData::SubscribePlayer {
         name: player_name.clone(),
         registration_token: token.clone(),
     })
     .unwrap();
 
-    let mut player_stream = stream.try_clone().unwrap();
-    send_message(&mut player_stream, &subscribe_message).unwrap();
-    handle_response(&mut player_stream, &mut ClientState::default()).unwrap();
+    send_message(&mut stream, &subscribe_message).unwrap();
+    handle_response(&mut stream, &mut ClientState::default()).unwrap();
 
-    // Ajouter le joueur à la liste partagée
+    let player = Player {
+        name: player_name,
+        registration_token: token,
+        stream: stream.try_clone().unwrap(),
+    };
+
     {
-        let mut players = subscribed_players.lock().unwrap();
-        players.push(Player {
-            name: player_name.clone(),
-            registration_token: token.clone(),
-            stream: player_stream.try_clone().unwrap(),
-        })
+        let mut players_lock = players.lock().unwrap();
+        players_lock.push(player);
+    }
+
+    loop {
+        let action = decide_action();
+        tx.send(PlayerAction { player_id, action }).unwrap();
+        let action_for_send = decide_action(); // Créer une nouvelle action car on peut pas clone action
+
+        send_message(&mut stream, &Message::Action(action_for_send)).unwrap();
+
+        // Recevoir et traiter la réponse du serveur
+        if let Ok(response) = receive_response(&mut stream) {
+            // Traiter la réponse ici
+            println!(
+                "Réponse du serveur pour le joueur {}: {:?}",
+                player_id, response
+            );
+        }
     }
 }
 
-pub fn move_player(player: &mut Player) {
-    loop {
-        println!("Player {} move.", player.name);
-        send_message(
-            &mut player.stream,
-            &Message::Action(ActionData::MoveTo(RelativeDirection::Right)),
-        )
-        .unwrap();
-        send_message(
-            &mut player.stream,
-            &Message::Action(ActionData::MoveTo(RelativeDirection::Left)),
-        )
-        .unwrap();
+fn decide_action() -> ActionData {
+    let mut rng = rand::rng();
+    match rng.random_range(0..4) {
+        0 => ActionData::MoveTo(RelativeDirection::Front),
+        1 => ActionData::MoveTo(RelativeDirection::Back),
+        2 => ActionData::MoveTo(RelativeDirection::Left),
+        _ => ActionData::MoveTo(RelativeDirection::Right),
     }
 }
