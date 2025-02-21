@@ -1,3 +1,4 @@
+mod decrypte;
 mod player;
 mod utils;
 
