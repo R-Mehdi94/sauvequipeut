@@ -30,7 +30,7 @@ impl TeamSecrets {
         let mut secrets = self.secrets.lock().unwrap();
         secrets.insert(player_id, secret);
         *self.last_update.lock().unwrap() = Instant::now();
-        println!("🔄 [UPDATE] Secret mis à jour pour joueur {}: {}", player_id, secret);
+        println!(" [UPDATE] Secret mis à jour pour joueur {}: {}", player_id, secret);
     }
 
     pub fn calculate_sum_modulo(&self, modulo: u64) -> (u64, Instant) {
@@ -45,8 +45,8 @@ impl TeamSecrets {
         let sum: u64 = secrets.values().sum();
         let final_result = sum % modulo;
 
-        println!("🧮 [DEBUG] Somme TOTALE: {}", sum);
-        println!("📊 Résultat FINAL (mod {}): {}\n", modulo, final_result);
+        println!(" [DEBUG] Somme TOTALE: {}", sum);
+        println!(" Résultat FINAL (mod {}): {}\n", modulo, final_result);
         std::io::stdout().flush().unwrap();
 
         (final_result, last_update)
@@ -58,7 +58,6 @@ impl TeamSecrets {
 }
 
 
-
 pub fn handle_challenge(
     player_id: u32,
     challenge_data: &ChallengeData,
@@ -67,15 +66,13 @@ pub fn handle_challenge(
 ) {
     match challenge_data {
         ChallengeData::SecretSumModulo(modulo) => {
-            println!("🧭 [INFO] Challenge SecretSumModulo reçu pour le joueur {} avec modulo {}", player_id, modulo);
+            println!(" [INFO] Challenge SecretSumModulo reçu pour le joueur {} avec modulo {}", player_id, modulo);
 
             let mut attempts = 0;
             while attempts < 3 {
-                // ✅ Étape 1 : Calcul initial
-                let (mut answer, initial_timestamp) = secrets.calculate_sum_modulo(*modulo);
-                println!("✅ [CALCUL] Résultat (tentative {}): {}", attempts + 1, answer);
 
-
+                 let (mut answer, _) = secrets.calculate_sum_modulo(*modulo);
+                println!("premier calcule  Résultat (tentative {}): {}", attempts + 1, answer);
 
 
                 let solve_message = match build_message(MessageData::Action(ActionData::SolveChallenge {
@@ -83,43 +80,47 @@ pub fn handle_challenge(
                 })) {
                     Ok(message) => message,
                     Err(e) => {
-                        eprintln!(" Erreur message: {:?}", e);
+                        eprintln!(" erreur Construction du message: {:?}", e);
                         return;
                     }
                 };
 
+
+                println!("  JSON envoyé au serveur : {}", serde_json::to_string(&solve_message).unwrap());
                 if let Err(e) = send_message(stream, &solve_message) {
-                    eprintln!(" Erreur envoi: {:?}", e);
+                    eprintln!(" Échec de l'envoi : {:?}", e);
                     attempts += 1;
                     continue;
-                }
-                  else {
-                    println!(" [INFO] Réponse envoyée avec succès !");
+                } else {
+                    println!("  Réponse envoyée avec succès !");
                 }
 
 
-                // 🕒 Étape 4 : Attente d'une réponse du serveur
                 match receive_response(stream) {
                     Ok(Message::RadarViewResult(_)) => {
-                        println!(" [SUCCÈS] Challenge résolu !");
+                        println!("  [SUCCÈS] Challenge résolu !");
                         return;
                     }
                     Ok(Message::ActionError(ActionError::InvalidChallengeSolution)) => {
-                        println!(" [INVALID] Le serveur a rejeté la solution.");
+                        println!("  [INVALID] Le serveur a rejeté la solution.  Recalcul en cours...");
+                        //  Recalcul immédiat sans attendre de nouveaux secrets
+                        let (new_answer, _) = secrets.calculate_sum_modulo(*modulo);
+                        println!(" [NOUVEAU CALCUL] Résultat après rejet : {}", new_answer);
+                        answer = new_answer;
                         attempts += 1;
                     }
                     Ok(other) => {
-                        println!("[RÉPONSE] Réponse inattendue : {:?}", other);
+                        println!("⚡ [RÉPONSE] Réponse inattendue : {:?}", other);
                         attempts += 1;
                     }
                     Err(e) => {
-                        eprintln!(" [ERREUR] Impossible de recevoir une réponse : {:?}", e);
+                        eprintln!(" [ERREUR] Problème lors de la réception : {:?}", e);
                         attempts += 1;
                     }
                 }
             }
             println!(" [ECHEC] Échec après {} tentatives.", attempts);
         }
-        _ => println!(" [INFO] Challenge non supporté pour le moment."),
+        _ => println!("️ [INFO] Challenge non supporté."),
     }
 }
