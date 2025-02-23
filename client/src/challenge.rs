@@ -14,47 +14,41 @@ use common::utils::utils::{build_message, receive_response, send_message};
 
 
 pub struct TeamSecrets {
-    pub(crate) secrets: Arc<Mutex<HashMap<u32, u64>>>,
-    last_update: Arc<Mutex<Instant>>,
+    pub secrets: Arc<Mutex<HashMap<u32, (u64, Instant)>>>,
 }
 
 impl TeamSecrets {
     pub fn new() -> Self {
         TeamSecrets {
             secrets: Arc::new(Mutex::new(HashMap::new())),
-            last_update: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
-    pub fn update_secret(&self, player_id: u32, secret: u64) {
-        let mut secrets = self.secrets.lock().unwrap();
-        secrets.insert(player_id, secret);
-        *self.last_update.lock().unwrap() = Instant::now();
-        println!(" [UPDATE] Secret mis à jour pour joueur {}: {}", player_id, secret);
-    }
+pub fn update_secret(&self, player_id: u32, secret: u64) {
+    let mut secrets = self.secrets.lock().unwrap();
+    secrets.insert(player_id, (secret, Instant::now()));  // 🔄 MAJ du secret + timestamp
+    println!("🔄 [UPDATE] Secret mis à jour pour joueur {}: {}", player_id, secret);
+}
+
 
     pub fn calculate_sum_modulo(&self, modulo: u64) -> (u64, Instant) {
         let secrets = self.secrets.lock().unwrap();
-        let last_update = *self.last_update.lock().unwrap();
-
-        println!("\n🔍 [DEBUG] Début du calcul SecretSumModulo");
-        println!("  - Modulo: {}", modulo);
-        println!("  - Secrets stockés: {:?}", *secrets);
-
-        // Calcul de la somme totale
-        let sum: u64 = secrets.values().sum();
+        let sum: u64 = secrets.values().map(|(value, _)| *value).sum();
         let final_result = sum % modulo;
 
-        println!(" [DEBUG] Somme TOTALE: {}", sum);
-        println!(" Résultat FINAL (mod {}): {}\n", modulo, final_result);
-        std::io::stdout().flush().unwrap();
 
-        (final_result, last_update)
+        let latest_update = secrets.values().map(|(_, ts)| *ts).max().unwrap_or(Instant::now());
+
+        println!(" Somme: {}, Résultat final (mod {}): {}", sum, modulo, final_result);
+        (final_result, latest_update)
     }
 
-    pub fn has_been_updated_since(&self, timestamp: Instant) -> bool {
-        *self.last_update.lock().unwrap() > timestamp
+    pub fn has_secret_updated_after(&self, timestamp: Instant) -> bool {
+        let secrets = self.secrets.lock().unwrap();
+        secrets.values().any(|(_, ts)| *ts > timestamp)
     }
+
+
 }
 
 
@@ -67,10 +61,13 @@ pub fn handle_challenge(
     match challenge_data {
         ChallengeData::SecretSumModulo(modulo) => {
             println!(" [INFO] Challenge SecretSumModulo reçu pour le joueur {} avec modulo {}", player_id, modulo);
+            let mut last_calculation_time = Instant::now();
 
             let mut attempts = 0;
             while attempts < 3 {
-
+                if secrets.has_secret_updated_after(last_calculation_time) {
+                    println!(" [INFO] Mise à jour détectée avant recalcul.");
+                }
                  let (mut answer, _) = secrets.calculate_sum_modulo(*modulo);
                 println!("premier calcule  Résultat (tentative {}): {}", attempts + 1, answer);
 
@@ -103,14 +100,14 @@ pub fn handle_challenge(
                     }
                     Ok(Message::ActionError(ActionError::InvalidChallengeSolution)) => {
                         println!("  [INVALID] Le serveur a rejeté la solution.  Recalcul en cours...");
-                        //  Recalcul immédiat sans attendre de nouveaux secrets
+
                         let (new_answer, _) = secrets.calculate_sum_modulo(*modulo);
                         println!(" [NOUVEAU CALCUL] Résultat après rejet : {}", new_answer);
                         answer = new_answer;
                         attempts += 1;
                     }
                     Ok(other) => {
-                        println!("⚡ [RÉPONSE] Réponse inattendue : {:?}", other);
+                        println!(" [RÉPONSE] Réponse inattendue : {:?}", other);
                         attempts += 1;
                     }
                     Err(e) => {

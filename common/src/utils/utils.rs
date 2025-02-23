@@ -25,7 +25,7 @@ use std::net::TcpStream;
 
 pub fn send_message(stream: &mut TcpStream, message: &Message) -> Result<(), MyError> {
     let json_message = serde_json::to_string(message)?;
-    println!("📤 JSON ENVOYÉ AU SERVEUR : {}", json_message);
+    println!(" JSON ENVOYÉ AU SERVEUR : {}", json_message);
 
     let size = json_message.len() as u32;
     stream.write_all(&size.to_le_bytes())?;
