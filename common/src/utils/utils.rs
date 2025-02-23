@@ -1,12 +1,12 @@
-use crate::message::Message::RadarViewResult;
-use crate::message::{Message, MessageData, RegisterTeam, SubscribePlayer, SubscribePlayerResult};
+ use crate::message::{Message, MessageData, RegisterTeam, SubscribePlayer, SubscribePlayerResult};
 use crate::state::ClientState;
 use crate::utils::my_error::MyError;
-use serde::de::Unexpected::Option;
-use std::io::{ErrorKind, Read, Write};
+ use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
+ use crate::message::challengedata::ChallengeData;
+ use crate::message::hintdata::HintData;
 
-pub fn build_message(data: MessageData) -> Result<Message, MyError> {
+ pub fn build_message(data: MessageData) -> Result<Message, MyError> {
     match data {
         MessageData::RegisterTeam { name } => Ok(Message::RegisterTeam(RegisterTeam { name })),
         MessageData::SubscribePlayer {
@@ -25,6 +25,7 @@ pub fn build_message(data: MessageData) -> Result<Message, MyError> {
 
 pub fn send_message(stream: &mut TcpStream, message: &Message) -> Result<(), MyError> {
     let json_message = serde_json::to_string(message)?;
+    println!("📤 JSON ENVOYÉ AU SERVEUR : {}", json_message);
 
     let size = json_message.len() as u32;
     stream.write_all(&size.to_le_bytes())?;
@@ -48,6 +49,46 @@ pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
             return Ok(response);
         }
     }
+    if let Some(challenge) = raw_message.get("Challenge") {
+        if let Some(challenge_obj) = challenge.as_object() {
+            if let Some(secret_sum_modulo) = challenge_obj.get("SecretSumModulo") {
+                if let Some(modulo) = secret_sum_modulo.as_u64() {
+                    return Ok(Message::Challenge(ChallengeData::SecretSumModulo(modulo)));
+                }
+            } else if challenge_obj.contains_key("SOS") {
+                return Ok(Message::Challenge(ChallengeData::SOS));
+            }
+        }
+    }
+    if let Some(hint) = raw_message.get("Hint") {
+        if let Some(hint_obj) = hint.as_object() {
+            if let Some(angle) = hint_obj.get("RelativeCompass").and_then(|v| v.as_f64()) {
+                return Ok(Message::Hint(HintData::RelativeCompass { angle: angle as f32 }));
+            } else if let Some(grid) = hint_obj.get("GridSize").and_then(|v| v.as_object()) {
+                if let (Some(columns), Some(rows)) = (grid.get("columns"), grid.get("rows")) {
+                    if let (Some(cols), Some(rws)) = (columns.as_u64(), rows.as_u64()) {
+                        return Ok(Message::Hint(HintData::GridSize { columns: cols as u32, rows: rws as u32 }));
+                    }
+                }
+            } else if let Some(secret) = hint_obj.get("Secret").and_then(|v| v.as_u64()) {
+                return Ok(Message::Hint( HintData::Secret(secret)));
+            } else if hint_obj.contains_key("SOSHelper") {
+                return Ok(Message::Hint(HintData::SOSHelper));
+            }
+        }
+    }
+     if let Some(monster) = raw_message.get("Monster") {
+        if let Some(details) = monster.as_str() {
+            println!(" Monstre détecté : {}", details);
+        }
+    }
+
+    if let Some(ally) = raw_message.get("Ally") {
+        if let Some(details) = ally.as_str() {
+            println!(" Allié à proximité : {}", details);
+        }
+    }
+
 
     let response: Message = serde_json::from_slice(&response_buffer)?;
     Ok(response)

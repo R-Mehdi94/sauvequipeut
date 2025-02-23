@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum ActionData {
     MoveTo(RelativeDirection),
     SolveChallenge { answer: String },
+
 }
 
 pub struct PlayerAction {

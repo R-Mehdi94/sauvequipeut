@@ -36,47 +36,81 @@ fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
     Ok(result)
 }
 
-struct DecodedView {
-    horizontal_passages: [u32; 4], // 4 lignes de 6 bits
-    vertical_passages: [u32; 3],   // 3 lignes de 8 bits
+pub struct DecodedView {
+    pub(crate) horizontal_passages: [u32; 4],
+    pub(crate) vertical_passages: [u32; 3],
     cells: Vec<u8>,
 }
 
+impl Default for DecodedView {
+    fn default() -> Self {
+        DecodedView {
+            horizontal_passages: [0; 4],
+            vertical_passages: [0; 3],
+            cells: vec![0; 9],
+        }
+    }
+}
+
+const ENEMY_INDICATOR: u8 = 0b10;
+const ALLY_INDICATOR: u8 = 0b01;
+const GOAL_INDICATOR: u8 = 0b10;
+const INVALID_CELL: u8 = 0b1111;
+
 impl DecodedView {
-    fn get_horizontal_passage(&self, index: usize) -> u32 {
+    pub fn get_horizontal_passage(&self, index: usize) -> u32 {
         self.horizontal_passages[index]
     }
 
-    fn get_vertical_passage(&self, index: usize) -> u32 {
+    pub fn get_vertical_passage(&self, index: usize) -> u32 {
         self.vertical_passages[index]
     }
 
-    fn get_cellules(&self) -> String {
-        let mut bits = String::new();
-        for &cell in &self.cells {
-            bits.push_str(&format!("{:08b}", cell));
-        }
+    pub fn is_passage_open(value: u32) -> bool {
+        value == 1
+    }
 
-        let mut grouped_hex = String::new();
-        for chunk in bits.chars().collect::<Vec<char>>().chunks(4) {
-            let chunk_str: String = chunk.iter().collect();
-            let chunk_value = u8::from_str_radix(&chunk_str, 2).unwrap_or(0);
-            grouped_hex.push_str(&format!("{:X}", chunk_value));
-        }
+    pub fn is_passage_wall(value: u32) -> bool {
+        value == 2
+    }
 
-        grouped_hex
-            .chars()
-            .collect::<Vec<char>>()
-            .chunks(3)
-            .map(|chunk| chunk.iter().collect::<String>())
-            .collect::<Vec<String>>()
-            .join(" ")
+    pub fn is_invalid_cell(&self, index: usize) -> bool {
+        self.cells.get(index).map_or(false, |&cell| cell == INVALID_CELL)
+    }
+
+    pub fn validate_data(&self) -> bool {
+        self.cells.len() == 9
+            && self.horizontal_passages.len() == 4
+            && self.vertical_passages.len() == 3
+    }
+
+    pub fn is_enemy_nearby(&self) -> bool {
+        self.cells
+            .iter()
+            .any(|&cell| (cell & 0b00000011) == ENEMY_INDICATOR)
+    }
+
+    pub fn is_ally_nearby(&self) -> bool {
+        self.cells
+            .iter()
+            .any(|&cell| (cell & 0b00000011) == ALLY_INDICATOR)
+    }
+
+    pub fn is_goal_nearby(&self) -> bool {
+        self.cells
+            .iter()
+            .any(|&cell| ((cell >> 2) & 0b00000011) == GOAL_INDICATOR)
+    }
+
+    pub fn check_for_hints(&self) -> bool {
+        self.cells
+            .iter()
+            .any(|&cell| ((cell >> 2) & 0b00000011) == 0b01)
     }
 }
 
 impl fmt::Display for DecodedView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Passages horizontaux
         writeln!(
             f,
             "Passages horizontaux: {:08b} {:08b} {:08b}",
@@ -96,7 +130,6 @@ impl fmt::Display for DecodedView {
             self.horizontal_passages[0] & 0b111111
         )?;
 
-        // Passages verticaux
         writeln!(
             f,
             "Passages verticaux: {:08b} {:08b} {:08b}",
@@ -113,36 +146,9 @@ impl fmt::Display for DecodedView {
             self.vertical_passages[2], self.vertical_passages[1], self.vertical_passages[0]
         )?;
 
-        // Cellules
-
         write!(f, "Les cellules: ")?;
         for &cell in &self.cells {
             write!(f, "{:02X} ", cell)?;
-        }
-        write!(f, "=> ")?;
-
-        let mut bits = String::new();
-        for &cell in &self.cells {
-            bits.push_str(&format!("{:08b}", cell));
-        }
-
-        let mut grouped_hex = String::new();
-        for chunk in bits.chars().collect::<Vec<char>>().chunks(4) {
-            let chunk_str: String = chunk.iter().collect();
-            let chunk_value = u8::from_str_radix(&chunk_str, 2).unwrap_or(0);
-            grouped_hex.push_str(&format!("{:X}", chunk_value));
-        }
-
-        for chunk in grouped_hex.chars().collect::<Vec<char>>().chunks(3) {
-            write!(f, "{} ", chunk.iter().collect::<String>())?;
-        }
-
-        if grouped_hex.len() % 3 != 0 {
-            write!(
-                f,
-                "(le {} final étant du padding)",
-                "0".repeat(3 - grouped_hex.len() % 3)
-            )?;
         }
 
         Ok(())
@@ -177,13 +183,12 @@ pub fn decode_and_format(input: &str) -> Result<DecodedView, String> {
     custom_decode(input).and_then(|decoded| format_decoded(&decoded))
 }
 
-fn exemple() {
+pub fn exemple() {
     let input = "ieysGjGO8papd/a";
     let test = decode_and_format(input).unwrap();
 
     println!("{}", test);
-
-    println!("Bits: {:06b}", test.get_horizontal_passage(1));
-    println!("Bits: {:06b}", test.get_vertical_passage(1));
-    println!("Bits: {:}", test.get_cellules());
+    println!("Bits horizontaux: {:06b}", test.get_horizontal_passage(1));
+    println!("Bits verticaux: {:06b}", test.get_vertical_passage(1));
+    println!("Cellules valides: {}", test.validate_data());
 }

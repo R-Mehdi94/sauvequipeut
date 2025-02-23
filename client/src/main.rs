@@ -1,6 +1,7 @@
 mod decrypte;
 mod player;
 mod utils;
+mod challenge;
 
 use crate::player::handle_player;
 use crate::utils::connect_to_server;
@@ -12,6 +13,8 @@ use common::utils::utils::*;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use env_logger::Env;
+use crate::decrypte::{exemple, DecodedView};
 
 fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
@@ -25,6 +28,7 @@ fn main() -> Result<(), MyError> {
     let team_name = "curious_broccoli".to_string();
     let message = build_message(MessageData::RegisterTeam { name: team_name })?;
 
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     send_message(&mut stream, &message)?;
     handle_response(&mut stream, &mut state)?;
 
@@ -39,6 +43,8 @@ fn main() -> Result<(), MyError> {
     };
 
     let players = Arc::new(Mutex::new(Vec::new()));
+
+    let radar_view = Arc::new(Mutex::new(DecodedView::default()));
     let (tx, rx) = channel();
 
     let player_threads: Vec<_> = (0..expected_players)
@@ -48,9 +54,10 @@ fn main() -> Result<(), MyError> {
             let token = token.clone();
             let addr = addr.to_string();
             let port = port.to_string();
+            let radar_view = Arc::clone(&radar_view);
 
             thread::spawn(move || {
-                handle_player(i, token, &players, &addr, &port, tx);
+                handle_player(i, token, &players, &addr, &port, tx,radar_view);
             })
         })
         .collect();
@@ -64,7 +71,6 @@ fn main() -> Result<(), MyError> {
     }
 
     coordinator_thread.join().unwrap();
-
     Ok(())
 }
 

@@ -6,7 +6,7 @@ pub struct RegisterTeam {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RegisdterTeamResult {
+pub struct RegisterTeamResult {
     pub Ok: Option<RegisterTeamSuccess>,
     pub Err: Option<String>,
 }
