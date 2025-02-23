@@ -53,7 +53,7 @@ pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
         if let Some(challenge_obj) = challenge.as_object() {
             if let Some(secret_sum_modulo) = challenge_obj.get("SecretSumModulo") {
                 if let Some(modulo) = secret_sum_modulo.as_u64() {
-                    return Ok(Message::Challenge(ChallengeData::SecretSumModulo(modulo)));
+                    return Ok(Message::Challenge(ChallengeData::SecretSumModulo(modulo as u128)));
                 }
             } else if challenge_obj.contains_key("SOS") {
                 return Ok(Message::Challenge(ChallengeData::SOS));
@@ -71,7 +71,7 @@ pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
                     }
                 }
             } else if let Some(secret) = hint_obj.get("Secret").and_then(|v| v.as_u64()) {
-                return Ok(Message::Hint( HintData::Secret(secret)));
+                return Ok(Message::Hint( HintData::Secret(secret as u128)));
             } else if hint_obj.contains_key("SOSHelper") {
                 return Ok(Message::Hint(HintData::SOSHelper));
             }

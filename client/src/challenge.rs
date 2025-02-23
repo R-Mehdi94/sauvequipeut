@@ -14,7 +14,7 @@ use common::utils::utils::{build_message, receive_response, send_message};
 
 
 pub struct TeamSecrets {
-    pub secrets: Arc<Mutex<HashMap<u32, (u64, Instant)>>>,
+    pub secrets: Arc<Mutex<HashMap<u32, (u128, Instant)>>>,
 }
 
 impl TeamSecrets {
@@ -24,16 +24,16 @@ impl TeamSecrets {
         }
     }
 
-pub fn update_secret(&self, player_id: u32, secret: u64) {
+pub fn update_secret(&self, player_id: u32, secret: u128) {
     let mut secrets = self.secrets.lock().unwrap();
-    secrets.insert(player_id, (secret, Instant::now()));  // 🔄 MAJ du secret + timestamp
+    secrets.insert(player_id, (secret, Instant::now()));
     println!("🔄 [UPDATE] Secret mis à jour pour joueur {}: {}", player_id, secret);
 }
 
 
-    pub fn calculate_sum_modulo(&self, modulo: u64) -> (u64, Instant) {
+    pub fn calculate_sum_modulo(&self, modulo: u128) -> (u128, Instant) {
         let secrets = self.secrets.lock().unwrap();
-        let sum: u64 = secrets.values().map(|(value, _)| *value).sum();
+        let sum: u128 = secrets.values().map(|(value, _)| *value).sum();
         let final_result = sum % modulo;
 
 
@@ -97,7 +97,7 @@ pub fn handle_challenge(
                 match receive_response(stream) {
                     Ok(Message::RadarViewResult(_)) => {
                         println!("  [SUCCÈS] Challenge résolu !");
-                        return;
+
                     }
                     Ok(Message::ActionError(ActionError::InvalidChallengeSolution)) => {
                         println!("  [INVALID] Le serveur a rejeté la solution.  Recalcul en cours...");

@@ -99,7 +99,8 @@ pub fn handle_player(
                             first_move_done = true;
                             ActionData::MoveTo(RelativeDirection::Right)
                         } else {
-                            let chosen_action = decide_action(&radar_data_locked, &mut last_action);
+                            let chosen_action = decide_action();
+                                //decide_action(&radar_data_locked, &mut last_action);
                             println!(" Action décidée : {:?}", chosen_action);
                             chosen_action
                         };
@@ -157,7 +158,18 @@ pub fn handle_player(
     fn decode_passage(value: u32) -> bool {
         value == 1
     }
-fn decide_action(radar_data: &DecodedView, last_action: &mut RelativeDirection) -> ActionData {
+
+
+fn decide_action() -> ActionData {
+    let mut rng = rand::rng();
+    match rng.random_range(0..4) {
+        0 => ActionData::MoveTo(RelativeDirection::Front),
+        1 => ActionData::MoveTo(RelativeDirection::Back),
+        2 => ActionData::MoveTo(RelativeDirection::Left),
+        _ => ActionData::MoveTo(RelativeDirection::Right),
+    }
+}
+/*fn decide_action(radar_data: &DecodedView, last_action: &mut RelativeDirection) -> ActionData {
     println!(
         "🔍 Analyse détaillée du radar:"
     );
@@ -219,4 +231,4 @@ fn decide_action(radar_data: &DecodedView, last_action: &mut RelativeDirection) 
     println!(" Direction choisie: {:?}", best_move);
     *last_action = *best_move;
     ActionData::MoveTo(*best_move)
-}
+} */
