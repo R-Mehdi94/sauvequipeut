@@ -64,7 +64,7 @@ pub fn handle_player(
     }
 
     let team_size = players.lock().unwrap().len();
-    let team_secrets = Arc::new(TeamSecrets::new(team_size));
+    let team_secrets = Arc::new(TeamSecrets::new());
 
     let mut last_failed_direction: Option<RelativeDirection> = None;
     let mut first_move_done = false;
