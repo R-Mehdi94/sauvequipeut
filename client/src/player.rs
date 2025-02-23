@@ -40,6 +40,7 @@ pub fn handle_player(
     port: &str,
     tx: Sender<PlayerAction>,
     radar_view: Arc<Mutex<DecodedView>>,
+    team_secrets: Arc<TeamSecrets>,
 ) {
     let mut stream = connect_to_server(addr, port).unwrap();
     let player_name = format!("Player_{}", player_id);
@@ -64,7 +65,6 @@ pub fn handle_player(
     }
 
     let team_size = players.lock().unwrap().len();
-    let team_secrets = Arc::new(TeamSecrets::new());
 
     let mut last_failed_direction: Option<RelativeDirection> = None;
     let mut first_move_done = false;

@@ -65,6 +65,7 @@ pub fn handle_challenge(
 
             let mut attempts = 0;
             while attempts < 3 {
+
                 if secrets.has_secret_updated_after(last_calculation_time) {
                     println!(" [INFO] Mise à jour détectée avant recalcul.");
                 }

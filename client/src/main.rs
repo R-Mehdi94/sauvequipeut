@@ -14,6 +14,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use env_logger::Env;
+use crate::challenge::TeamSecrets;
 use crate::decrypte::{exemple, DecodedView};
 
 fn main() -> Result<(), MyError> {
@@ -46,6 +47,8 @@ fn main() -> Result<(), MyError> {
 
     let radar_view = Arc::new(Mutex::new(DecodedView::default()));
     let (tx, rx) = channel();
+    let team_secrets = Arc::new(TeamSecrets::new());
+
 
     let player_threads: Vec<_> = (0..expected_players)
         .map(|i| {
@@ -55,9 +58,10 @@ fn main() -> Result<(), MyError> {
             let addr = addr.to_string();
             let port = port.to_string();
             let radar_view = Arc::clone(&radar_view);
+            let team_secrets_clone = Arc::clone(&team_secrets);
 
             thread::spawn(move || {
-                handle_player(i, token, &players, &addr, &port, tx,radar_view);
+                handle_player(i, token, &players, &addr, &port, tx,radar_view,team_secrets_clone);
             })
         })
         .collect();
