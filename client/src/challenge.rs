@@ -72,8 +72,9 @@ pub fn handle_challenge(
             let mut attempts = 0;
             while attempts < 3 {
                 // ✅ Étape 1 : Calcul initial
-                let (answer, _) = secrets.calculate_sum_modulo(*modulo);
-                println!(" [CALCUL] Résultat (tentative {}): {}", attempts + 1, answer);
+                let (mut answer, initial_timestamp) = secrets.calculate_sum_modulo(*modulo);
+                println!("✅ [CALCUL] Résultat (tentative {}): {}", attempts + 1, answer);
+
 
 
 
@@ -95,6 +96,7 @@ pub fn handle_challenge(
                   else {
                     println!(" [INFO] Réponse envoyée avec succès !");
                 }
+
 
                 // 🕒 Étape 4 : Attente d'une réponse du serveur
                 match receive_response(stream) {
