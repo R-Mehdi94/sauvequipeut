@@ -64,7 +64,7 @@ pub fn handle_challenge(
             let mut last_calculation_time = Instant::now();
 
             let mut attempts = 0;
-            while attempts < 3 {
+
 
                 if secrets.has_secret_updated_after(last_calculation_time) {
                     println!(" [INFO] Mise à jour détectée avant recalcul.");
@@ -83,42 +83,18 @@ pub fn handle_challenge(
                     }
                 };
 
-
                 println!("  JSON envoyé au serveur : {}", serde_json::to_string(&solve_message).unwrap());
                 if let Err(e) = send_message(stream, &solve_message) {
                     eprintln!(" Échec de l'envoi : {:?}", e);
-                    attempts += 1;
-                    continue;
+
                 } else {
                     println!("  Réponse envoyée avec succès !");
+                    return;
                 }
 
 
-                match receive_response(stream) {
-                    Ok(Message::RadarViewResult(_)) => {
-                        println!("  [SUCCÈS] Challenge résolu !");
 
-                    }
-                    Ok(Message::ActionError(ActionError::InvalidChallengeSolution)) => {
-                        println!("  [INVALID] Le serveur a rejeté la solution.  Recalcul en cours...");
-
-                        let (new_answer, _) = secrets.calculate_sum_modulo(*modulo);
-                        println!(" [NOUVEAU CALCUL] Résultat après rejet : {}", new_answer);
-                        answer = new_answer;
-                        attempts += 1;
-                    }
-                    Ok(other) => {
-                        println!(" [RÉPONSE] Réponse inattendue : {:?}", other);
-                        attempts += 1;
-                    }
-                    Err(e) => {
-                        eprintln!(" [ERREUR] Problème lors de la réception : {:?}", e);
-                        attempts += 1;
-                    }
-                }
-            }
-            println!(" [ECHEC] Échec après {} tentatives.", attempts);
-        }
+         }
         _ => println!("️ [INFO] Challenge non supporté."),
     }
 }

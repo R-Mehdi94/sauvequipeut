@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::player::is_passage_open;
 
 fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
     let char_to_value = |c: char| -> Result<u8, String> {
@@ -39,7 +40,7 @@ fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
 pub struct DecodedView {
     pub(crate) horizontal_passages: [u32; 4],
     pub(crate) vertical_passages: [u32; 3],
-    cells: Vec<RadarCell>,
+    pub(crate) cells: Vec<RadarCell>,
 }
 
 
@@ -57,7 +58,8 @@ const ENEMY_INDICATOR: u8 = 0b10;
 const ALLY_INDICATOR: u8 = 0b01;
 const GOAL_INDICATOR: u8 = 0b10;
 const INVALID_CELL: u8 = 0b1111;
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq,Clone)]
+
 pub enum RadarCell {
     Undefined,
     Open,
@@ -68,10 +70,10 @@ pub enum RadarCell {
 impl RadarCell {
     pub fn from_bits(bits: &str) -> Self {
         match bits {
-            "00" | "1111" => RadarCell::Undefined,
-            "01" | "0000" => RadarCell::Open,
-            "10" => RadarCell::Wall,
-            "1000" => RadarCell::Exit,
+                "1111" => RadarCell::Undefined,
+                "0000" => RadarCell::Open,
+
+                "1000" => RadarCell::Exit,
             _ => RadarCell::Unknown(bits.to_string()),
         }
     }
@@ -97,24 +99,6 @@ impl DecodedView {
         self.vertical_passages[index]
     }
 
-    pub fn extract_passage(value: u32, index: usize) -> u32 {
-        (value >> (index * 2)) & 0b11
-    }
-
-
-    pub fn is_passage_open(value: u32) -> bool {
-        value == 1  // 01
-    }
-
-
-    pub fn is_passage_wall(value: u32) -> bool {
-        value == 2  // 10
-    }
-
-
-    pub fn is_passage_undefined(value: u32) -> bool {
-        value == 0  // 00
-    }
 
 
     pub fn validate_data(&self) -> bool {
@@ -192,7 +176,7 @@ fn format_decoded(decoded: &[u8]) -> Result<DecodedView, String> {
         .iter()
         .map(|byte| format!("{:08b}", byte))
         .collect();
-    let cells = parse_cells_part(&cells_bits);
+
     Ok(DecodedView {
         horizontal_passages: [
             (horizontal >> 18) & 0b111111,
@@ -205,7 +189,7 @@ fn format_decoded(decoded: &[u8]) -> Result<DecodedView, String> {
             (vertical >> 8) & 0xFF,
             vertical & 0xFF,
         ],
-        cells: cells.iter().map(|c| RadarCell::from_bits(c.as_str())).collect(),
+        cells: parse_cells_part(&cells_bits),
     })
 }
 
@@ -213,15 +197,23 @@ pub fn decode_and_format(input: &str) -> Result<DecodedView, String> {
     custom_decode(input).and_then(|decoded| format_decoded(&decoded))
 }
 
-pub fn exemple() {
-    let input = "ieysGjGO8papd/a";
-    let test = decode_and_format(input).unwrap();
+pub fn exemple(test: &DecodedView ) {
+    //let input = "LzeiLIuc/W8aaaa";
+   // let test = decode_and_format(input).unwrap();
+
+    let right_open =  is_passage_open(test.get_vertical_passage(1), 2);
+
+    let front_open =  is_passage_open(test.get_horizontal_passage(1), 2);
+
+    let left_open =  is_passage_open(test.get_vertical_passage(1), 1);
 
     println!("{}", test);
     println!("Bits horizontaux: {:06b}", test.get_horizontal_passage(1));
     println!("Bits verticaux: {:06b}", test.get_vertical_passage(1));
     println!("Cellules valides: {}", test.validate_data());
-
+    println!("extract bit from passage right_open :{}" , right_open );
+    println!("extract bit from passage front_open :{}" , front_open );
+    println!("extract bit from passage right_open :{}" , left_open );
     for (i, cell) in test.cells.iter().enumerate() {
         println!("Cellule {}: {:?}", i, cell);
     }

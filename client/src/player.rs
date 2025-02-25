@@ -14,10 +14,11 @@ use std::time::Duration;
 use log::{info, warn};
 use rand::prelude::IndexedRandom;
 use rand::seq::SliceRandom;
+use common::message::challengedata::ChallengeData;
 use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
-use crate::decrypte::{decode_and_format, exemple, DecodedView};
+use crate::decrypte::{decode_and_format, exemple, DecodedView, RadarCell};
 
 pub struct Player {
     pub name: String,
@@ -64,85 +65,98 @@ pub fn handle_player(
         players_lock.push(player);
     }
 
-    let team_size = players.lock().unwrap().len();
 
-    let mut last_failed_direction: Option<RelativeDirection> = None;
-    let mut first_move_done = false;
+let mut last_challenge:Option<ChallengeData>=None;
+     loop {
+          if let Ok(response) = receive_response(&mut stream) {
+              println!(
+                  "Réponse du serveur pour le joueur {}: {:?}",
+                  player_id, response
+              );
 
+              match response {
+                  Message::Challenge(challenge_data) => {
+                      println!(" Challenge reçu pour le joueur {}: {:?}", player_id, challenge_data);
+                      last_challenge = Some(challenge_data.clone());
+                      handle_challenge(player_id, &challenge_data, &Arc::clone(&team_secrets), &mut stream);
 
- loop {
-        if let Ok(response) = receive_response(&mut stream) {
-            println!(
-                "Réponse du serveur pour le joueur {}: {:?}",
-                player_id, response
-            );
-
-            match response {
-                Message::Challenge(challenge_data) => {
-                    println!(" Challenge reçu pour le joueur {}: {:?}", player_id, challenge_data);
-                    handle_challenge(player_id, &challenge_data, &Arc::clone(&team_secrets), &mut stream);
-                }
-                Message::Hint(hint_data) => {
-                    println!(" Indice reçu pour le joueur {}: {:?}", player_id, hint_data);
-                    if let HintData::Secret(secret_value) = hint_data {
-                        println!(" Secret mis à jour pour le joueur {}: {}", player_id, secret_value);
-                        team_secrets.update_secret(player_id, secret_value);
-                        println!(" Secrets actuels: {:?}", team_secrets.secrets.lock().unwrap());
-                    }
-                }
-                Message::RadarViewResult(radar_encoded) => {
-                    if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
-                        let radar_data_locked = decoded_radar;
-
-                         let action = decide_action(&radar_data_locked);
+                  }
 
 
 
+                  Message::Hint(hint_data) => {
+                      println!(" Indice reçu pour le joueur {}: {:?}", player_id, hint_data);
+                      if let HintData::Secret(secret_value) = hint_data {
+                          println!(" Secret mis à jour pour le joueur {}: {}", player_id, secret_value);
+                          team_secrets.update_secret(player_id, secret_value);
+                          println!(" Secrets actuels: {:?}", team_secrets.secrets.lock().unwrap());
+                      }
+                  }
+                  Message::RadarViewResult(radar_encoded) => {
+                      if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
+                          let radar_data_locked = decoded_radar;
+                            exemple (&radar_data_locked);
+                           let action = decide_action(&radar_data_locked);
 
 
-                        tx.send(PlayerAction {
-                            player_id,
-                            action: action.clone(),
-                        }).unwrap();
+                          tx.send(PlayerAction {
+                              player_id,
+                              action: action.clone(),
+                          }).unwrap();
 
-                        let send_result = send_message(&mut stream, &Message::Action(action));
-                        if let Err(e) = send_result {
-                             warn!("🔄 Tentative de reconnexion dans 2 secondes...");
-                            thread::sleep(Duration::from_secs(2));
+                          let send_result = send_message(&mut stream, &Message::Action(action));
+                          if let Err(e) = send_result {
+                               warn!("🔄 Tentative de reconnexion dans 2 secondes...");
+                              thread::sleep(Duration::from_secs(2));
 
-                            if let Ok(new_stream) = connect_to_server(addr, port) {
-                                stream = new_stream;
+                              if let Ok(new_stream) = connect_to_server(addr, port) {
+                                  stream = new_stream;
 
-                                let resubscribe_message = build_message(MessageData::SubscribePlayer {
-                                    name: player_name.clone(),
-                                    registration_token: token.clone(),
-                                }).unwrap();
+                                  let resubscribe_message = build_message(MessageData::SubscribePlayer {
+                                      name: player_name.clone(),
+                                      registration_token: token.clone(),
+                                  }).unwrap();
 
-                                if let Err(e) = send_message(&mut stream, &resubscribe_message) {
-                                     return;
-                                }
-                                handle_response(&mut stream, &mut ClientState::default()).unwrap();
-                             } else {
-                                 return;
-                            }
-                        }
-                    }
-                }
+                                  if let Err(e) = send_message(&mut stream, &resubscribe_message) {
+                                       return;
+                                  }
+                                  handle_response(&mut stream, &mut ClientState::default()).unwrap();
+                               } else {
+                                   return;
+                              }
+                          }
+                      }
+                  }
 
-                Message::ActionError(error) => {
-                    println!("️ Erreur d'action pour le joueur {}: {:?}", player_id, error);
-                    if let Some(direction) = match error {
-                        ActionError::CannotPassThroughWall => Some(RelativeDirection::Right),
-                        ActionError::CannotPassThroughOpponent => Some(RelativeDirection::Front),
-                        _ => None,
-                    } {
-                        last_failed_direction = Some(direction);
-                    }
-                }
-                _ => println!(" Réponse non gérée reçue pour le joueur {}: {:?}", player_id, response),
-            }
-        }
-    }
+                  Message::ActionError(error) => {
+                      match error {
+                          ActionError::InvalidChallengeSolution=> {
+                              println!(" [INVALID] Le serveur a rejeté la solution. 🔄 Recalcul immédiat...: {:?}", error);
+
+                              if let Some(challenge) = &last_challenge {
+                                  handle_challenge(player_id, challenge, &Arc::clone(&team_secrets), &mut stream);
+                              } else {
+                                  println!("⚠️ Aucun challenge précédent trouvé pour recalculer.");
+                              }
+                          }
+                          ActionError::CannotPassThroughWall => {
+                              println!("🚧 [MUR] Impossible de passer à travers le mur. 🚫 Changer de direction !: {:?}", error );
+                          }
+                          _ => {
+                              println!("⚠️ [ERREUR NON GÉRÉE] : {:?}", error);
+                          }
+                      }
+                  }
+
+                  _ => println!("🔍 Réponse non gérée pour le joueur {}: {:?}", player_id, response),
+
+
+
+               }
+          }
+      }
+
+
 }
 
 
@@ -153,25 +167,40 @@ pub fn handle_player(
 
 
 
+pub fn is_passage_open(passage: u32, bit_index: usize) -> bool {
+    let bits = (passage >> (bit_index * 2)) & 0b11;
+    bits == 0b01
+}
 
 pub fn decide_action(radar: &DecodedView) -> ActionData {
-     if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_vertical_passage(2), 1)) {
-        println!("➡️ Priorité à droite !");
+    let front_cell = &radar.cells[1];
+    let right_cell = &radar.cells[5];
+    let left_cell = &radar.cells[3];
+
+    let right_open =  is_passage_open(radar.get_vertical_passage(1), 2);
+
+    let front_open =  is_passage_open(radar.get_horizontal_passage(1), 2);
+
+    let left_open =  is_passage_open(radar.get_vertical_passage(1), 1);
+
+    if right_open {
+        println!("➡️ [ACTION] On va à droite (passage libre)!");
         ActionData::MoveTo(RelativeDirection::Right)
-    }
-     else if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_horizontal_passage(1), 1)) {
-        println!("⬆️ Droite bloquée, on avance !");
+    } else if front_open {
+        println!("⬆️ [ACTION] On avance (passage libre)!");
         ActionData::MoveTo(RelativeDirection::Front)
-    }
-     else if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_vertical_passage(0), 1)) {
-        println!("⬅️ Droite et devant bloqués, on va à gauche !");
+    } else if left_open {
+        println!("⬅️ [ACTION] On va à gauche (passage libre)!");
         ActionData::MoveTo(RelativeDirection::Left)
-    }
-     else {
-        println!("⬇️ Tout bloqué, on recule.");
+    } else   {
+        println!("⬇️ [ACTION] Tout bloqué, on recule (passage libre).");
         ActionData::MoveTo(RelativeDirection::Back)
     }
 }
+
+
+
+
 
 
 
