@@ -17,7 +17,7 @@ use rand::seq::SliceRandom;
 use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
-use crate::decrypte::{decode_and_format, DecodedView};
+use crate::decrypte::{decode_and_format, exemple, DecodedView};
 
 pub struct Player {
     pub name: String,
@@ -68,9 +68,9 @@ pub fn handle_player(
 
     let mut last_failed_direction: Option<RelativeDirection> = None;
     let mut first_move_done = false;
-    let mut last_action = RelativeDirection::Right;
 
-    loop {
+
+ loop {
         if let Ok(response) = receive_response(&mut stream) {
             println!(
                 "Réponse du serveur pour le joueur {}: {:?}",
@@ -79,31 +79,26 @@ pub fn handle_player(
 
             match response {
                 Message::Challenge(challenge_data) => {
-                    println!("🧭 Challenge reçu pour le joueur {}: {:?}", player_id, challenge_data);
+                    println!(" Challenge reçu pour le joueur {}: {:?}", player_id, challenge_data);
                     handle_challenge(player_id, &challenge_data, &Arc::clone(&team_secrets), &mut stream);
                 }
                 Message::Hint(hint_data) => {
-                    println!("🧭 Indice reçu pour le joueur {}: {:?}", player_id, hint_data);
+                    println!(" Indice reçu pour le joueur {}: {:?}", player_id, hint_data);
                     if let HintData::Secret(secret_value) = hint_data {
-                        println!("🔑 Secret mis à jour pour le joueur {}: {}", player_id, secret_value);
+                        println!(" Secret mis à jour pour le joueur {}: {}", player_id, secret_value);
                         team_secrets.update_secret(player_id, secret_value);
-                        println!("📊 Secrets actuels: {:?}", team_secrets.secrets.lock().unwrap());
+                        println!(" Secrets actuels: {:?}", team_secrets.secrets.lock().unwrap());
                     }
                 }
                 Message::RadarViewResult(radar_encoded) => {
                     if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
                         let radar_data_locked = decoded_radar;
 
-                        let action = if !first_move_done {
-                            println!(" Premier déplacement : Direction droite (Right) comme demandé.");
-                            first_move_done = true;
-                            ActionData::MoveTo(RelativeDirection::Right)
-                        } else {
-                            let chosen_action = decide_action();
-                                //decide_action(&radar_data_locked, &mut last_action);
-                            println!(" Action décidée : {:?}", chosen_action);
-                            chosen_action
-                        };
+                         let action = decide_action(&radar_data_locked);
+
+
+
+
 
                         tx.send(PlayerAction {
                             player_id,
@@ -112,12 +107,11 @@ pub fn handle_player(
 
                         let send_result = send_message(&mut stream, &Message::Action(action));
                         if let Err(e) = send_result {
-                            eprintln!(" Erreur lors de l'envoi du message: {:?}", e);
-                            warn!(" Tentative de reconnexion dans 2 secondes...");
+                             warn!("🔄 Tentative de reconnexion dans 2 secondes...");
                             thread::sleep(Duration::from_secs(2));
+
                             if let Ok(new_stream) = connect_to_server(addr, port) {
                                 stream = new_stream;
-                                eprintln!(" Reconnexion réussie.");
 
                                 let resubscribe_message = build_message(MessageData::SubscribePlayer {
                                     name: player_name.clone(),
@@ -125,18 +119,16 @@ pub fn handle_player(
                                 }).unwrap();
 
                                 if let Err(e) = send_message(&mut stream, &resubscribe_message) {
-                                    eprintln!(" Échec de la resouscription après reconnexion: {:?}", e);
-                                    return;
+                                     return;
                                 }
                                 handle_response(&mut stream, &mut ClientState::default()).unwrap();
-                                eprintln!(" Re-souscription réussie après reconnexion.");
-                            } else {
-                                eprintln!(" Échec de la reconnexion. Arrêt du joueur.");
-                                return;
+                             } else {
+                                 return;
                             }
                         }
                     }
                 }
+
                 Message::ActionError(error) => {
                     println!("️ Erreur d'action pour le joueur {}: {:?}", player_id, error);
                     if let Some(direction) = match error {
@@ -160,15 +152,31 @@ pub fn handle_player(
     }
 
 
-fn decide_action() -> ActionData {
-    let mut rng = rand::rng();
-    match rng.random_range(0..4) {
-        0 => ActionData::MoveTo(RelativeDirection::Front),
-        1 => ActionData::MoveTo(RelativeDirection::Back),
-        2 => ActionData::MoveTo(RelativeDirection::Left),
-        _ => ActionData::MoveTo(RelativeDirection::Right),
+
+
+pub fn decide_action(radar: &DecodedView) -> ActionData {
+     if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_vertical_passage(2), 1)) {
+        println!("➡️ Priorité à droite !");
+        ActionData::MoveTo(RelativeDirection::Right)
+    }
+     else if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_horizontal_passage(1), 1)) {
+        println!("⬆️ Droite bloquée, on avance !");
+        ActionData::MoveTo(RelativeDirection::Front)
+    }
+     else if DecodedView::is_passage_open(DecodedView::extract_passage(radar.get_vertical_passage(0), 1)) {
+        println!("⬅️ Droite et devant bloqués, on va à gauche !");
+        ActionData::MoveTo(RelativeDirection::Left)
+    }
+     else {
+        println!("⬇️ Tout bloqué, on recule.");
+        ActionData::MoveTo(RelativeDirection::Back)
     }
 }
+
+
+
+
+
 /*fn decide_action(radar_data: &DecodedView, last_action: &mut RelativeDirection) -> ActionData {
     println!(
         "🔍 Analyse détaillée du radar:"

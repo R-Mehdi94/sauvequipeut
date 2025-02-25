@@ -44,7 +44,7 @@ pub fn receive_response(stream: &mut TcpStream) -> Result<Message, MyError> {
     let mut raw_message: serde_json::Value = serde_json::from_slice(&response_buffer)?;
     if let Some(radar_view) = raw_message.get("RadarView") {
         if radar_view.is_string() {
-            // Si "RadarView" est une chaîne, crée le message approprié
+
             let response = Message::RadarViewResult(radar_view.as_str().unwrap().to_string());
             return Ok(response);
         }
