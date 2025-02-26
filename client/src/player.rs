@@ -64,6 +64,7 @@ pub fn handle_player(
         let mut players_lock = players.lock().unwrap();
         players_lock.push(player);
     }
+    //exemple ();
 
 
 let mut last_challenge:Option<ChallengeData>=None;
@@ -82,8 +83,6 @@ let mut last_challenge:Option<ChallengeData>=None;
 
                   }
 
-
-
                   Message::Hint(hint_data) => {
                       println!(" Indice reçu pour le joueur {}: {:?}", player_id, hint_data);
                       if let HintData::Secret(secret_value) = hint_data {
@@ -95,9 +94,8 @@ let mut last_challenge:Option<ChallengeData>=None;
                   Message::RadarViewResult(radar_encoded) => {
                       if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
                           let radar_data_locked = decoded_radar;
-                            exemple (&radar_data_locked);
-                           let action = decide_action(&radar_data_locked);
-
+                          //  exemple (&radar_data_locked);
+                            let action = decide_action(&radar_data_locked);
 
                           tx.send(PlayerAction {
                               player_id,
@@ -156,7 +154,6 @@ let mut last_challenge:Option<ChallengeData>=None;
           }
       }
 
-
 }
 
 
@@ -168,9 +165,32 @@ let mut last_challenge:Option<ChallengeData>=None;
 
 
 pub fn is_passage_open(passage: u32, bit_index: usize) -> bool {
-    let bits = (passage >> (bit_index * 2)) & 0b11;
-    bits == 0b01
+
+    let corrected_index = 3 - bit_index;
+    let bits = (passage >> (corrected_index * 2)) & 0b11;
+
+    println!(
+        "🔎 Vérification passage: bits = {:02b}, bit_index = {}, corrected_index = {}",
+        bits, bit_index, corrected_index
+    );
+
+    match bits {
+        0b01 => {
+            println!(" Passage ouvert !");
+            true
+        }
+        0b00 | 0b10 => {
+            println!(" Passage fermé !");
+            false
+        }
+        _ => {
+            println!("⚠Valeur inattendue !");
+            false
+        }
+    }
 }
+
+
 
 pub fn decide_action(radar: &DecodedView) -> ActionData {
     let front_cell = &radar.cells[1];

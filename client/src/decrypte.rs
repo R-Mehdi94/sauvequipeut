@@ -63,12 +63,12 @@ const INVALID_CELL: u8 = 0b1111;
 pub enum RadarCell {
     Undefined,
     Open,
-    Wall,
+
     Exit,
     Unknown(String),
 }
 impl RadarCell {
-    pub fn from_bits(bits: &str) -> Self {
+    pub fn from_bits(bits: &str) -> Self {// a revoir
         match bits {
                 "1111" => RadarCell::Undefined,
                 "0000" => RadarCell::Open,
@@ -197,9 +197,9 @@ pub fn decode_and_format(input: &str) -> Result<DecodedView, String> {
     custom_decode(input).and_then(|decoded| format_decoded(&decoded))
 }
 
-pub fn exemple(test: &DecodedView ) {
-    //let input = "LzeiLIuc/W8aaaa";
-   // let test = decode_and_format(input).unwrap();
+pub fn exemple( ) {
+    let input = "LPeivIyc/W8aaaa";
+     let test = decode_and_format(input).unwrap();
 
     let right_open =  is_passage_open(test.get_vertical_passage(1), 2);
 
@@ -209,11 +209,11 @@ pub fn exemple(test: &DecodedView ) {
 
     println!("{}", test);
     println!("Bits horizontaux: {:06b}", test.get_horizontal_passage(1));
-    println!("Bits verticaux: {:06b}", test.get_vertical_passage(1));
+    println!("Bits verticaux: {:08b}", test.get_vertical_passage(1));
     println!("Cellules valides: {}", test.validate_data());
     println!("extract bit from passage right_open :{}" , right_open );
     println!("extract bit from passage front_open :{}" , front_open );
-    println!("extract bit from passage right_open :{}" , left_open );
+    println!("extract bit from passage left_open :{}" , left_open );
     for (i, cell) in test.cells.iter().enumerate() {
         println!("Cellule {}: {:?}", i, cell);
     }
