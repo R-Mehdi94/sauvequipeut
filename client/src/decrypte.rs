@@ -53,40 +53,35 @@ impl Default for DecodedView {
         }
     }
 }
-
-const ENEMY_INDICATOR: u8 = 0b10;
-const ALLY_INDICATOR: u8 = 0b01;
-const GOAL_INDICATOR: u8 = 0b10;
-const INVALID_CELL: u8 = 0b1111;
-#[derive(Debug, PartialEq,Clone)]
-
+#[derive(Clone ,Debug ,PartialEq)]
 pub enum RadarCell {
     Undefined,
     Open,
-
     Exit,
     Unknown(String),
 }
-impl RadarCell {
-    pub fn from_bits(bits: &str) -> Self {// a revoir
-        match bits {
-                "1111" => RadarCell::Undefined,
-                "0000" => RadarCell::Open,
 
-                "1000" => RadarCell::Exit,
+impl RadarCell {
+    pub fn from_bits(bits: &str) -> Self {
+        //println!("🔎 Décodage cellule: bits = {}", bits);
+        match bits {
+            "1111" => RadarCell::Undefined,
+            "0000" => RadarCell::Open,
+            "1000" => RadarCell::Exit,
             _ => RadarCell::Unknown(bits.to_string()),
         }
     }
 }
+
 fn parse_cells_part(cells_part: &str) -> Vec<RadarCell> {
     let mut cells = Vec::new();
     for i in 0..9 {
         let cell_bits = &cells_part[i * 4..(i + 1) * 4];
+        //  println!("🧩 Cellule {}: bits = {}", i, cell_bits); // 🔍 Trace par cellule
         cells.push(RadarCell::from_bits(cell_bits));
     }
     cells
 }
-
 impl DecodedView {
     pub fn get_horizontal_passage(&self, index: usize) -> u32 {
         self.horizontal_passages[index]
@@ -197,23 +192,24 @@ pub fn decode_and_format(input: &str) -> Result<DecodedView, String> {
     custom_decode(input).and_then(|decoded| format_decoded(&decoded))
 }
 
-pub fn exemple( ) {
-    let input = "LPeivIyc/W8aaaa";
-     let test = decode_and_format(input).unwrap();
 
-    let right_open =  is_passage_open(test.get_vertical_passage(1), 2);
+pub fn exemple() {
+    let input = "svgOjswwaa8a8aa";
+    let test = decode_and_format(input).unwrap();
 
-    let front_open =  is_passage_open(test.get_horizontal_passage(1), 2);
+    let right_open = is_passage_open(test.get_vertical_passage(1), 2);
+    let front_open = is_passage_open(test.get_horizontal_passage(1), 2);
+    let left_open = is_passage_open(test.get_vertical_passage(1), 1);
 
-    let left_open =  is_passage_open(test.get_vertical_passage(1), 1);
-
+    println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
     println!("{}", test);
-    println!("Bits horizontaux: {:06b}", test.get_horizontal_passage(1));
-    println!("Bits verticaux: {:08b}", test.get_vertical_passage(1));
+    println!("Bits horizontaux (ligne 1): {:06b}", test.get_horizontal_passage(1));
+    println!("Bits verticaux (colonne 1): {:08b}", test.get_vertical_passage(1));
     println!("Cellules valides: {}", test.validate_data());
-    println!("extract bit from passage right_open :{}" , right_open );
-    println!("extract bit from passage front_open :{}" , front_open );
-    println!("extract bit from passage left_open :{}" , left_open );
+    println!("➡️ Passage à droite ouvert : {}", right_open);
+    println!("⬆️ Passage devant ouvert : {}", front_open);
+    println!("⬅️ Passage à gauche ouvert : {}", left_open);
+
     for (i, cell) in test.cells.iter().enumerate() {
         println!("Cellule {}: {:?}", i, cell);
     }
