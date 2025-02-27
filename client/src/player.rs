@@ -13,10 +13,10 @@ use common::message::challengedata::ChallengeData;
 use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
-use crate::decrypte::{decode_and_format, DecodedView};
+use crate::decrypte::{decode_and_format, DecodedView, RadarCell};
 use crate::hint::{ handle_hint};
 use crate::position::Position;
-use crate::radar_view::{choose_least_visited_direction, decide_action, follower_choose_action, handle_radar_view, leader_choose_action, send_action, update_player_position};
+use crate::radar_view::{choose_least_visited_direction, compute_absolute_position, decide_action, follower_choose_action, leader_choose_action, send_action, update_player_position};
 
 pub struct Player {
     pub name: String,
@@ -46,8 +46,7 @@ pub fn handle_player(
     position_tracker: Arc<Mutex<HashMap<u32, (i32, i32)>>>,
     visited_tracker: Arc<Mutex<HashMap<(i32, i32), usize>>>,
     exit_position: Arc<Mutex<Option<(i32, i32)>>>,
-    labyrinth_map:Arc<Mutex<HashMap<u32, (i32, i32)>>>,
-
+    labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>>,
 ) {
     let mut stream = connect_to_server(addr, port).unwrap();
     let player_name = format!("Player_{}", player_id);
@@ -110,7 +109,9 @@ pub fn handle_player(
 
                 Message::RadarViewResult(radar_encoded) => {
                     if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
-                        println!("✅ [DEBUG] Décode radar réussi pour le joueur {}", player_id);
+                        println!(" [DEBUG] Décode radar réussi pour le joueur {}", player_id);
+
+
 
                         let mut position_map = position_tracker.lock().unwrap();
                         let player_position = position_map.entry(player_id).or_insert((0, 0));
@@ -121,11 +122,27 @@ pub fn handle_player(
                         let visit_count = visited_map.entry(current_position).or_insert(0);
                         *visit_count += 1;
 
-                        println!("📍 [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
+                        println!(" [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
 
                         let grid_size = *shared_grid_size.lock().unwrap();
                         let compass_angle = *shared_compass.lock().unwrap();
-
+                        // 🔐 Stockage de la carte du labyrinthe
+                        let mut map_lock = labyrinth_map.lock().unwrap();
+                        for (index, cell) in decoded_radar.cells.iter().enumerate() {
+                            let absolute_position = compute_absolute_position(current_position, index);
+                            map_lock.insert(absolute_position, cell.clone());
+                        }
+                        drop(map_lock);
+                        // 🏁 Vérifier si une sortie a été détectée
+                        let mut exit_lock = exit_position.lock().unwrap();
+                        for (index, cell) in decoded_radar.cells.iter().enumerate() {
+                            if *cell == RadarCell::Exit {
+                                let exit_pos = compute_absolute_position(current_position, index);
+                                *exit_lock = Some(exit_pos);
+                                println!("🏁 [SORTIE DÉTECTÉE] Joueur {} a trouvé la sortie en {:?}", player_id, exit_pos);
+                            }
+                        }
+                        drop(exit_lock);
                         let is_leader = {
                             let mut leader_locked = leader_id.lock().unwrap();
                             if leader_locked.is_none() {
@@ -137,9 +154,10 @@ pub fn handle_player(
                             }
                         };
 
+
                         let action = if is_leader {
                             println!("🟢 [LEADER] Choix de direction pour le leader.");
-                            leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap())
+                            leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap(),&exit_position)
                         } else {
                             let leader_exists = leader_id.lock().unwrap().is_some();
                             if leader_exists {
@@ -154,12 +172,12 @@ pub fn handle_player(
                         let mut position_map = position_tracker.lock().unwrap();
                         update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
 
-                        println!("📤 [ENVOI] Action du joueur {} : {:?}", player_id, action);
+                        println!(" [ENVOI] Action du joueur {} : {:?}", player_id, action);
                         send_action(player_id, action, &tx, &mut stream);
 
-                        println!("🔄 [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);
+                        println!(" [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);
                     } else {
-                        println!("❌ [ERROR] Échec du décodage radar pour le joueur {}", player_id);
+                        println!(" [ERROR] Échec du décodage radar pour le joueur {}", player_id);
                     }
                 }
 

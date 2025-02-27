@@ -20,9 +20,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use env_logger::Env;
 use crate::challenge::TeamSecrets;
-use crate::decrypte::{exemple, DecodedView};
-use crate::position::Position;
-fn main() -> Result<(), MyError> {
+use crate::decrypte::{exemple, DecodedView, RadarCell};
+ fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
     let addr = "localhost";
     let port = "8778";
@@ -50,8 +49,7 @@ fn main() -> Result<(), MyError> {
 
     let players = Arc::new(Mutex::new(Vec::new()));
 
-    let radar_view = Arc::new(Mutex::new(DecodedView::default()));
-    let (tx, rx) = channel();
+     let (tx, rx) = channel();
     let team_secrets = Arc::new(TeamSecrets::new());
     let shared_compass = Arc::new(Mutex::new(None));
     let leader_id = Arc::new(Mutex::new(None));
@@ -60,7 +58,7 @@ fn main() -> Result<(), MyError> {
     let position_tracker = Arc::new(Mutex::new(HashMap::new()));
     let visited_tracker = Arc::new(Mutex::new(HashMap::new()));
     let exit_position = Arc::new(Mutex::new(None));
-    let labyrinth_map = Arc::new(Mutex::new(HashMap::new()));
+     let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
 
 
     let player_threads: Vec<_> = (0..expected_players)

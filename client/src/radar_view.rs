@@ -13,60 +13,6 @@ use crate::decrypte::{decode_and_format, is_passage_open, DecodedView, RadarCell
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 
 
-pub fn handle_radar_view(
-    player_id: u32,
-    radar_encoded: String,
-    shared_grid_size: Arc<Mutex<Option<(u32, u32)>>>,
-    shared_compass: Arc<Mutex<Option<f32>>>,
-    leader_id: Arc<Mutex<Option<u32>>>,
-    shared_leader_action: Arc<Mutex<Option<ActionData>>>,
-    tx: Sender<PlayerAction>,
-    mut stream: TcpStream,
-    position_tracker: Arc<Mutex<HashMap<u32, (i32, i32)>>>,
-    visited_tracker: Arc<Mutex<HashMap<(i32, i32), usize>>>,
-) {
-    if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
-        let mut position_map = position_tracker.lock().unwrap();
-
-
-        let player_position = position_map.entry(player_id).or_insert((0, 0));
-        let current_position = *player_position;
-
-
-        let mut visited_map = visited_tracker.lock().unwrap();
-        let visit_count = visited_map.entry(current_position).or_insert(0);
-        *visit_count += 1;
-
-        println!("📍 [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
-
-        let grid_size = *shared_grid_size.lock().unwrap();
-        let compass_angle = *shared_compass.lock().unwrap();
-
-        let is_leader = determine_leader(player_id, &leader_id);
-
-        drop(position_map);
-
-        let action = if is_leader {
-            leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap())
-        } else {
-            let leader_exists = leader_id.lock().unwrap().is_some();
-            if leader_exists {
-                follower_choose_action(player_id, &decoded_radar, &shared_leader_action)
-            } else {
-                println!("⚠️ [INFO] Aucun leader encore défini, utilisation de la stratégie plombier.");
-                decide_action(&decoded_radar)
-            }
-        };
-
-        // 📌 Reprendre le lock pour mettre à jour la position
-        let mut position_map = position_tracker.lock().unwrap();
-        update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
-
-        send_action(player_id, action, &tx, &mut stream);
-
-    }
-}
-
 
 
 pub fn calculate_position(player_id: u32, radar_data: &DecodedView) -> (i32, i32) {
@@ -75,7 +21,6 @@ pub fn calculate_position(player_id: u32, radar_data: &DecodedView) -> (i32, i32
     let y = (player_id as i32 / 10) % 10;
     (x, y)
 }
-
 
 pub fn determine_leader(player_id: u32, leader_id: &Arc<Mutex<Option<u32>>>) -> bool {
     let mut leader_locked = leader_id.lock().unwrap();
@@ -146,17 +91,33 @@ pub fn simulate_movement(
 
     Some(new_position)
 }
-
-
-
-  pub fn leader_choose_action(
+pub fn leader_choose_action(
     player_id: u32,
     radar_data: &DecodedView,
     grid_size: Option<(u32, u32)>,
     compass_angle: Option<f32>,
     tracker: &HashMap<(i32, i32), usize>,
     position_tracker: &HashMap<u32, (i32, i32)>,
+    exit_position: &Arc<Mutex<Option<(i32, i32)>>>,
 ) -> ActionData {
+    let current_position = *position_tracker.get(&player_id).unwrap();
+
+     if let Some(exit_pos) = *exit_position.lock().unwrap() {
+        println!("🚪 [INFO] Joueur {} sait où est la sortie en {:?}", player_id, exit_pos);
+        if let Some(direction) = find_path_to_exit(player_id, position_tracker, exit_pos) {
+            println!("🚀 [SORTIE] Joueur {} se dirige vers {:?}", player_id, direction);
+            return ActionData::MoveTo(direction);
+        }
+    }
+
+     if let Some(grid) = grid_size {
+        let near_borders = detect_near_border(current_position, grid);
+        if !near_borders.is_empty() {
+            println!("🏁 [INFO] Joueur {} proche d'un bord. Stratégie ajustée.", player_id);
+        }
+    }
+
+    // 🗺️ Exploration basée sur la taille du labyrinthe
     if let Some((cols, rows)) = grid_size {
         println!("🗺️ [LEADER] Taille labyrinthe : {} colonnes x {} lignes.", cols, rows);
         let direction_priority = direction_from_grid_size(grid_size);
@@ -176,6 +137,7 @@ pub fn simulate_movement(
         println!("🧱 [FALLBACK] GridSize échoué ➔ Tentative avec la boussole.");
     }
 
+    // 🧭 Si on a la boussole, on essaye de l'utiliser
     if let Some(angle) = compass_angle {
         println!("🧭 [LEADER] Utilisation de la boussole : {:.2}°", angle);
         let direction_priority = direction_from_angle(angle);
@@ -197,9 +159,10 @@ pub fn simulate_movement(
         println!("⚙️ [INFO] Aucune information ➔ Stratégie plombier.");
     }
 
-    // 🚀 Dernier recours : Choisir la direction la moins visitée
+    // 🚀 Dernier recours : Prendre la direction la moins visitée
     choose_least_visited_direction(player_id, radar_data, tracker, position_tracker)
 }
+
 
 pub fn save_leader_action(shared_leader_action: &Arc<Mutex<Option<ActionData>>>, action: &ActionData) {
     let mut leader_action_locked = shared_leader_action.lock().unwrap();
@@ -248,7 +211,31 @@ pub fn send_action(
         thread::sleep(Duration::from_secs(2));
     }
 }
+pub fn estimate_position_from_walls(
+    position: (i32, i32),
+    grid_size: (u32, u32)
+) -> (i32, i32) {
+    let (cols, rows) = grid_size;
 
+    let estimated_x = if position.0 < 5 {
+        0
+    } else if position.0 > (cols as i32 - 5) {
+        cols as i32 - 1
+    } else {
+        position.0
+    };
+
+    let estimated_y = if position.1 < 5 {
+        0
+    } else if position.1 > (rows as i32 - 5) {
+        rows as i32 - 1
+    } else {
+        position.1
+    };
+
+    println!("📍 [INFO] Position estimée : ({}, {})", estimated_x, estimated_y);
+    (estimated_x, estimated_y)
+}
 
 pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<RelativeDirection>) -> Option<RelativeDirection> {
     for direction in directions {
@@ -293,7 +280,6 @@ pub fn follow_leader_direction(radar: &DecodedView, leader_direction: RelativeDi
     choose_accessible_direction(radar, direction_priority)
 }
 
-
 pub fn decide_action(radar: &DecodedView) -> ActionData {
     let front_cell = &radar.cells[1];
     let right_cell = &radar.cells[5];
@@ -332,7 +318,6 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
     }
 }
 
-
 pub fn update_player_position(
     player_id: u32,
     player_position: &mut (i32, i32),
@@ -348,3 +333,84 @@ pub fn update_player_position(
         println!("📍 [POSITION] Joueur {} se déplace vers {:?}", player_id, player_position);
     }
 }
+
+
+pub fn compute_absolute_position(current_pos: (i32, i32), cell_index: usize) -> (i32, i32) {
+    match cell_index {
+        0 => (current_pos.0 - 1, current_pos.1 - 1), // Haut gauche
+        1 => (current_pos.0, current_pos.1 - 1),     // Haut
+        2 => (current_pos.0 + 1, current_pos.1 - 1), // Haut droite
+        3 => (current_pos.0 - 1, current_pos.1),     // Gauche
+        4 => (current_pos.0, current_pos.1),         // Centre (position actuelle)
+        5 => (current_pos.0 + 1, current_pos.1),     // Droite
+        6 => (current_pos.0 - 1, current_pos.1 + 1), // Bas gauche
+        7 => (current_pos.0, current_pos.1 + 1),     // Bas
+        8 => (current_pos.0 + 1, current_pos.1 + 1), // Bas droite
+        _ => current_pos,
+    }
+}
+pub fn detect_near_border(
+    position: (i32, i32),
+    grid_size: (u32, u32),
+) -> Vec<RelativeDirection> {
+    let mut directions = vec![];
+
+    let (cols, rows) = grid_size;
+    let (x, y) = position;
+
+    if x == 0 {
+        println!("🧱 [INFO] Joueur proche du bord gauche !");
+        directions.push(RelativeDirection::Right);
+    }
+    if x == (cols as i32 - 1) {
+        println!("🧱 [INFO] Joueur proche du bord droit !");
+        directions.push(RelativeDirection::Left);
+    }
+    if y == 0 {
+        println!("🧱 [INFO] Joueur proche du bord supérieur !");
+        directions.push(RelativeDirection::Back);
+    }
+    if y == (rows as i32 - 1) {
+        println!("🧱 [INFO] Joueur proche du bord inférieur !");
+        directions.push(RelativeDirection::Front);
+    }
+
+    directions
+}
+pub fn assign_exploration_zone(player_id: u32, grid_size: (u32, u32)) -> (i32, i32) {
+    let num_sectors_x = grid_size.0 / 5;
+    let num_sectors_y = grid_size.1 / 5;
+
+    let x_zone = (player_id % 5) as i32 * num_sectors_x as i32;
+    let y_zone = (player_id / 5) as i32 * num_sectors_y as i32;
+
+    println!("🗺️ [INFO] Joueur {} est assigné à la zone ({}, {})", player_id, x_zone, y_zone);
+    (x_zone, y_zone)
+}
+
+
+pub fn find_path_to_exit(
+    player_id: u32,
+    position_tracker: &HashMap<u32, (i32, i32)>,
+    exit_position: (i32, i32)
+) -> Option<RelativeDirection> {
+    let current_position = position_tracker.get(&player_id)?;
+
+    let dx = exit_position.0 - current_position.0;
+    let dy = exit_position.1 - current_position.1;
+
+    if dx.abs() > dy.abs() {
+        if dx > 0 {
+            return Some(RelativeDirection::Right);
+        } else {
+            return Some(RelativeDirection::Left);
+        }
+    } else {
+        if dy > 0 {
+            return Some(RelativeDirection::Back);
+        } else {
+            return Some(RelativeDirection::Front);
+        }
+    }
+}
+

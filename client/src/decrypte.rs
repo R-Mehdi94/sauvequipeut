@@ -66,7 +66,7 @@ impl RadarCell {
          match bits {
             "1111" => RadarCell::Undefined,
             "0000" => RadarCell::Open,
-            "1000" => RadarCell::Exit,
+            "1000"|"1001" => RadarCell::Exit,
             _ => RadarCell::Unknown(bits.to_string()),
         }
     }
