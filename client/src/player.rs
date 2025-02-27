@@ -7,21 +7,16 @@ use std::net::TcpStream;
 use common::message::{Message, MessageData};
 use common::state::ClientState;
 use common::utils::utils::{build_message, handle_response, receive_response, send_message};
-use rand::{Rng};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
-use log::{info, warn};
-use rand::prelude::IndexedRandom;
-use rand::seq::SliceRandom;
 use common::message::challengedata::ChallengeData;
 use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
-use crate::decrypte::{decode_and_format, exemple, DecodedView, RadarCell};
-use crate::hint::{direction_from_angle, direction_from_grid_size, handle_hint};
-use crate::Position::Position;
+use crate::decrypte::{decode_and_format, DecodedView};
+use crate::hint::{ handle_hint};
+use crate::position::Position;
+use crate::radar_view::{choose_least_visited_direction, decide_action, follower_choose_action, handle_radar_view, leader_choose_action, send_action, update_player_position};
 
 pub struct Player {
     pub name: String,
@@ -48,9 +43,10 @@ pub fn handle_player(
     leader_id:Arc<Mutex<Option<u32>>>,
     shared_leader_action: Arc<Mutex<Option<ActionData>>>,
     shared_grid_size: Arc<Mutex<Option<(u32, u32)>>>,
-    player_position: Arc<Mutex<Position>>,
-    explored_cells: Arc<Mutex<HashSet<(i32, i32)>>>,
-
+    position_tracker: Arc<Mutex<HashMap<u32, (i32, i32)>>>,
+    visited_tracker: Arc<Mutex<HashMap<(i32, i32), usize>>>,
+    exit_position: Arc<Mutex<Option<(i32, i32)>>>,
+    labyrinth_map:Arc<Mutex<HashMap<u32, (i32, i32)>>>,
 
 ) {
     let mut stream = connect_to_server(addr, port).unwrap();
@@ -114,18 +110,26 @@ pub fn handle_player(
 
                 Message::RadarViewResult(radar_encoded) => {
                     if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
-                        let radar_data_locked = decoded_radar;
-                        {
-                            let mut explored = explored_cells.lock().unwrap();
-                           // explored.insert(radar_data_locked.current_position);
-                        }
+                        println!("✅ [DEBUG] Décode radar réussi pour le joueur {}", player_id);
+
+                        let mut position_map = position_tracker.lock().unwrap();
+                        let player_position = position_map.entry(player_id).or_insert((0, 0));
+                        let current_position = *player_position;
+                        drop(position_map);
+
+                        let mut visited_map = visited_tracker.lock().unwrap();
+                        let visit_count = visited_map.entry(current_position).or_insert(0);
+                        *visit_count += 1;
+
+                        println!("📍 [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
+
                         let grid_size = *shared_grid_size.lock().unwrap();
                         let compass_angle = *shared_compass.lock().unwrap();
 
                         let is_leader = {
                             let mut leader_locked = leader_id.lock().unwrap();
                             if leader_locked.is_none() {
-                                println!("👑 [LEADER] Le joueur {} devient temporairement leader (GridSize).", player_id);
+                                println!("👑 [INFO] Joueur {} devient leader.", player_id);
                                 *leader_locked = Some(player_id);
                                 true
                             } else {
@@ -133,120 +137,32 @@ pub fn handle_player(
                             }
                         };
 
-
-                        if is_leader {
-                            let action = if let Some((cols, rows)) = grid_size {
-                                println!("🗺️ [LEADER] Taille labyrinthe : {} colonnes x {} lignes.", cols, rows);
-                                let direction_priority = direction_from_grid_size(grid_size);
-
-                                if let Some(direction) = choose_accessible_direction(&radar_data_locked, direction_priority) {
-                                    ActionData::MoveTo(direction)
-                                } else {
-                                    println!("🧱 [FALLBACK] GridSize échoué ➔ Tentative avec la boussole.");
-
-                                    if let Some(angle) = compass_angle {
-                                        println!("🧭 [LEADER] Utilisation de la boussole : {:.2}°", angle);
-                                        let direction_priority = direction_from_angle(angle);
-                                        choose_accessible_direction(&radar_data_locked, direction_priority)
-                                            .map(ActionData::MoveTo)
-                                            .unwrap_or_else(|| {
-                                                println!("🧱 [FALLBACK FINAL] Boussole échouée ➔ Stratégie plombier.");
-                                                decide_action(&radar_data_locked)
-                                            })
-                                    } else {
-                                        println!("🧭 [INFO] Boussole non disponible ➔ Stratégie plombier.");
-                                        decide_action(&radar_data_locked)
-                                    }
-                                }
-                            } else if let Some(angle) = compass_angle {
-                                println!("🧭 [LEADER] Boussole disponible (sans GridSize) : {:.2}°", angle);
-                                let direction_priority = direction_from_angle(angle);
-                                choose_accessible_direction(&radar_data_locked, direction_priority)
-                                    .map(ActionData::MoveTo)
-                                    .unwrap_or_else(|| {
-                                        println!("🧱 [FALLBACK FINAL] Boussole échouée ➔ Stratégie plombier.");
-                                        decide_action(&radar_data_locked)
-                                    })
+                        let action = if is_leader {
+                            println!("🟢 [LEADER] Choix de direction pour le leader.");
+                            leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap())
+                        } else {
+                            let leader_exists = leader_id.lock().unwrap().is_some();
+                            if leader_exists {
+                                println!("🔵 [FOLLOWER] Suivi du leader.");
+                                follower_choose_action(player_id, &decoded_radar, &shared_leader_action)
                             } else {
-                                println!("⚙️ [INFO] Aucune information (GridSize/Compass) ➔ Stratégie plombier.");
-                                decide_action(&radar_data_locked)
-                            };
-
-                            {
-                                let mut leader_action_locked = shared_leader_action.lock().unwrap();
-                                *leader_action_locked = Some(action.clone());
+                                println!("⚠️ [INFO] Aucun leader encore défini, stratégie plombier.");
+                                decide_action(&decoded_radar)
                             }
+                        };
 
-                            tx.send(PlayerAction {
-                                player_id,
-                                action: action.clone(),
-                            }).unwrap();
+                        let mut position_map = position_tracker.lock().unwrap();
+                        update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
 
-                            let send_result = send_message(&mut stream, &Message::Action(action));
-                            if let Err(e) = send_result {
-                                warn!("🔄 Tentative de reconnexion dans 2 secondes...");
-                                thread::sleep(Duration::from_secs(2));
-                            }
-                        }
+                        println!("📤 [ENVOI] Action du joueur {} : {:?}", player_id, action);
+                        send_action(player_id, action, &tx, &mut stream);
 
-                        else {
-                            let current_leader = leader_id.lock().unwrap();
-                            if current_leader.is_none() {
-
-                                println!("🤖 Joueur {} : Pas de leader actuel, exploration avec stratégie plombier.", player_id);
-                                let action = decide_action(&radar_data_locked);
-
-                                tx.send(PlayerAction {
-                                    player_id,
-                                    action: action.clone(),
-                                }).unwrap();
-
-                                let send_result = send_message(&mut stream, &Message::Action(action));
-                                if let Err(e) = send_result {
-                                    warn!("🔄 Tentative de reconnexion dans 2 secondes...");
-                                    thread::sleep(Duration::from_secs(2));
-                                }
-                            } else {
-
-                                println!("🤝 Joueur {} attend l'action du leader.", player_id);
-
-                                let leader_action = {
-                                    let action_locked = shared_leader_action.lock().unwrap();
-                                    action_locked.clone()
-                                };
-                                if let Some(action) = leader_action {
-                                    println!("🤝 Joueur {} essaye de suivre l'action du leader : {:?}", player_id, action);
-
-                                    let accessible_direction = follow_leader_direction(&radar_data_locked, match action {
-                                        ActionData::MoveTo(dir) => dir,
-                                        _ => RelativeDirection::Front,
-                                    });
-
-                                    if let Some(adapted_direction) = accessible_direction {
-                                        println!("🤝 Joueur {} suit finalement la direction : {:?}", player_id, adapted_direction);
-
-                                        let adapted_action = ActionData::MoveTo(adapted_direction);
-                                        tx.send(PlayerAction {
-                                            player_id,
-                                            action: adapted_action.clone(),
-                                        }).unwrap();
-
-                                        let send_result = send_message(&mut stream, &Message::Action(adapted_action));
-                                        if let Err(e) = send_result {
-                                            warn!("🔄 Tentative de reconnexion dans 2 secondes...");
-                                            thread::sleep(Duration::from_secs(2));
-                                        }
-                                    } else {
-                                        println!("🤝 Joueur {} ne peut pas suivre le leader (toutes directions bloquées). Attente...", player_id);
-                                        thread::sleep(Duration::from_millis(500)); // Attente courte
-                                    }
-                                }
-
-                            }
-                        }
-
+                        println!("🔄 [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);
+                    } else {
+                        println!("❌ [ERROR] Échec du décodage radar pour le joueur {}", player_id);
                     }
                 }
+
 
                 Message::ActionError(error) => {
                     match error {
@@ -260,7 +176,7 @@ pub fn handle_player(
                             }
                         }
                         ActionError::CannotPassThroughWall => {
-                            println!("🚧 [MUR] Impossible de passer à travers le mur. 🚫 Changer de direction !: {:?}", error );
+
                         }
                         _ => {
                             println!("⚠️ [ERREUR NON GÉRÉE] : {:?}", error);
@@ -286,99 +202,6 @@ fn decode_passage(value: u32) -> bool {
 
 
 
-pub fn is_passage_open(passage: u32, bit_index: usize) -> bool {
 
-    let corrected_index = 3- bit_index;
-    let bits = (passage >> (corrected_index * 2)) & 0b11;
-
-    println!(
-        "🔎 Vérification passage: bits = {:02b}, bit_index = {}, corrected_index = {}",
-        bits, bit_index, corrected_index
-    );
-
-    match bits {
-        0b01 => {
-            println!(" Passage ouvert !");
-            true
-        }
-        0b00 | 0b10 => {
-            println!(" Passage fermé !");
-            false
-        }
-        _ => {
-            println!("⚠Valeur inattendue !");
-            false
-        }
-    }
-}
-pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<RelativeDirection>) -> Option<RelativeDirection> {
-    for direction in directions {
-        let accessible = match direction {
-            RelativeDirection::Front => {
-                let front_cell = &radar.cells[1];
-                *front_cell == RadarCell::Open && is_passage_open(radar.get_horizontal_passage(1), 2)
-            }
-            RelativeDirection::Right => {
-                let right_cell = &radar.cells[5];
-                *right_cell == RadarCell::Open && is_passage_open(radar.get_vertical_passage(1), 2)
-            }
-            RelativeDirection::Left => {
-                let left_cell = &radar.cells[3];
-                *left_cell == RadarCell::Open && is_passage_open(radar.get_vertical_passage(1), 1)
-            }
-            RelativeDirection::Back => {
-                let back_cell = &radar.cells[7];
-                *back_cell == RadarCell::Open && is_passage_open(radar.get_horizontal_passage(2), 2)
-            }
-        };
-
-        if accessible {
-            println!("✅ [ACCESSIBLE] Direction accessible : {:?}", direction);
-            return Some(direction);
-        } else {
-            println!("🚫 [BLOQUÉ] Direction bloquée : {:?}", direction);
-        }
-    }
-    println!("⚠️ [INFO] Aucune direction accessible.");
-    None
-}
-
-pub fn follow_leader_direction(radar: &DecodedView, leader_direction: RelativeDirection) -> Option<RelativeDirection> {
-     let direction_priority = match leader_direction {
-        RelativeDirection::Front => vec![RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back],
-        RelativeDirection::Right => vec![RelativeDirection::Right, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Left],
-        RelativeDirection::Left => vec![RelativeDirection::Left, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Right],
-        RelativeDirection::Back => vec![RelativeDirection::Back, RelativeDirection::Left, RelativeDirection::Right, RelativeDirection::Front],
-    };
-
-    choose_accessible_direction(radar, direction_priority)
-}
-
-
-pub fn decide_action(radar: &DecodedView) -> ActionData {
-    let front_cell = &radar.cells[1];
-    let right_cell = &radar.cells[5];
-    let left_cell = &radar.cells[3];
-
-
-    let right_open = *right_cell == RadarCell::Open
-        && is_passage_open(radar.get_vertical_passage(1), 2);
-
-    let front_open = *front_cell == RadarCell::Open
-        && is_passage_open(radar.get_horizontal_passage(1), 2);
-
-    let left_open = *left_cell == RadarCell::Open
-        && is_passage_open(radar.get_vertical_passage(1), 1);
-
-    if right_open {
-         ActionData::MoveTo(RelativeDirection::Right)
-    } else if front_open {
-         ActionData::MoveTo(RelativeDirection::Front)
-    } else if left_open {
-         ActionData::MoveTo(RelativeDirection::Left)
-    } else  {
-         ActionData::MoveTo(RelativeDirection::Back)
-    }
-}
 
 

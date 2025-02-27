@@ -3,9 +3,11 @@ mod player;
 mod utils;
 mod challenge;
 mod hint;
-mod Position;
+mod position;
+mod radar_view;
+mod exploration_tracker;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use crate::player::handle_player;
 use crate::utils::connect_to_server;
 use common::message::actiondata::PlayerAction;
@@ -19,7 +21,7 @@ use std::thread;
 use env_logger::Env;
 use crate::challenge::TeamSecrets;
 use crate::decrypte::{exemple, DecodedView};
-
+use crate::position::Position;
 fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
     let addr = "localhost";
@@ -55,8 +57,10 @@ fn main() -> Result<(), MyError> {
     let leader_id = Arc::new(Mutex::new(None));
     let shared_leader_action = Arc::new(Mutex::new(None));
     let shared_grid_size = Arc::new(Mutex::new(None));
-    let explored_cells = Arc::new(Mutex::new(HashSet::new()));
-    let player_position = Arc::new(Mutex::new(Position { x: 0, y: 0 }));
+    let position_tracker = Arc::new(Mutex::new(HashMap::new()));
+    let visited_tracker = Arc::new(Mutex::new(HashMap::new()));
+    let exit_position = Arc::new(Mutex::new(None));
+    let labyrinth_map = Arc::new(Mutex::new(HashMap::new()));
 
 
     let player_threads: Vec<_> = (0..expected_players)
@@ -66,17 +70,18 @@ fn main() -> Result<(), MyError> {
             let token = token.clone();
             let addr = addr.to_string();
             let port = port.to_string();
-            let player_position_clone = Arc::clone(&player_position);
             let team_secrets_clone = Arc::clone(&team_secrets);
             let shared_compass_clone = Arc::clone(&shared_compass);
             let leader_id_clone =Arc::clone(&leader_id);
             let shared_leader_action_clone = Arc::clone(&shared_leader_action);
             let shared_grid_size_clone = Arc::clone(&shared_grid_size);
-            let explored_cells_clone = Arc::clone(&explored_cells);
-
+            let position_tracker_clone = Arc::clone(&position_tracker);
+            let visited_tracker_clone = Arc::clone(&visited_tracker);
+            let exit_position_clone=Arc::clone(&exit_position);
+            let labyrinth_map_clone=Arc::clone(&labyrinth_map);
             thread::spawn(move || {
-                handle_player(i, token, &players, &addr, &port, tx,team_secrets_clone , shared_compass_clone,leader_id_clone,shared_leader_action_clone,shared_grid_size_clone,  player_position_clone,
-                              explored_cells_clone);
+                handle_player(i, token, &players, &addr, &port, tx,team_secrets_clone , shared_compass_clone,leader_id_clone,shared_leader_action_clone,shared_grid_size_clone,
+                              position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone);
             })
         })
         .collect();

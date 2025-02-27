@@ -1,9 +1,8 @@
 use std::sync::{Arc, Mutex};
 use common::message::hintdata::HintData;
-use common::message::MessageData;
+
 use common::message::relativedirection::RelativeDirection;
-use common::utils::utils::{build_message, send_message};
-use crate::challenge::TeamSecrets;
+
 
 
 pub fn direction_from_angle(angle: f32) -> Vec<RelativeDirection> {
@@ -108,7 +107,7 @@ pub fn handle_hint(
 
 
 
-                return ;
+            return ;
 
         }
         _ => {}

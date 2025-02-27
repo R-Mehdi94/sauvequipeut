@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::player::is_passage_open;
+
 
 fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
     let char_to_value = |c: char| -> Result<u8, String> {
@@ -36,7 +36,7 @@ fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
 
     Ok(result)
 }
-
+#[derive(Clone,Eq, Hash, PartialEq,Debug)]
 pub struct DecodedView {
     pub(crate) horizontal_passages: [u32; 4],
     pub(crate) vertical_passages: [u32; 3],
@@ -53,7 +53,7 @@ impl Default for DecodedView {
         }
     }
 }
-#[derive(Clone ,Debug ,PartialEq)]
+#[derive(Clone ,Debug ,PartialEq ,Eq, Hash)]
 pub enum RadarCell {
     Undefined,
     Open,
@@ -63,8 +63,7 @@ pub enum RadarCell {
 
 impl RadarCell {
     pub fn from_bits(bits: &str) -> Self {
-        //println!("🔎 Décodage cellule: bits = {}", bits);
-        match bits {
+         match bits {
             "1111" => RadarCell::Undefined,
             "0000" => RadarCell::Open,
             "1000" => RadarCell::Exit,
@@ -192,7 +191,31 @@ pub fn decode_and_format(input: &str) -> Result<DecodedView, String> {
     custom_decode(input).and_then(|decoded| format_decoded(&decoded))
 }
 
+pub fn is_passage_open(passage: u32, bit_index: usize) -> bool {
 
+    let corrected_index = 3- bit_index;
+    let bits = (passage >> (corrected_index * 2)) & 0b11;
+
+    println!(
+        "🔎 Vérification passage: bits = {:02b}, bit_index = {}, corrected_index = {}",
+        bits, bit_index, corrected_index
+    );
+
+    match bits {
+        0b01 => {
+            println!(" Passage ouvert !");
+            true
+        }
+        0b00 | 0b10 => {
+            println!(" Passage fermé !");
+            false
+        }
+        _ => {
+            println!("⚠Valeur inattendue !");
+            false
+        }
+    }
+}
 pub fn exemple() {
     let input = "svgOjswwaa8a8aa";
     let test = decode_and_format(input).unwrap();
