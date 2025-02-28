@@ -59,7 +59,7 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
     let visited_tracker = Arc::new(Mutex::new(HashMap::new()));
     let exit_position = Arc::new(Mutex::new(None));
      let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
-
+     let hint_received = Arc::new(Mutex::new(false));
 
     let player_threads: Vec<_> = (0..expected_players)
         .map(|i| {
@@ -77,9 +77,10 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
             let visited_tracker_clone = Arc::clone(&visited_tracker);
             let exit_position_clone=Arc::clone(&exit_position);
             let labyrinth_map_clone=Arc::clone(&labyrinth_map);
+            let hint_received_clone = Arc::clone(&hint_received);
             thread::spawn(move || {
                 handle_player(i, token, &players, &addr, &port, tx,team_secrets_clone , shared_compass_clone,leader_id_clone,shared_leader_action_clone,shared_grid_size_clone,
-                              position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone);
+                              position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone,hint_received_clone);
             })
         })
         .collect();

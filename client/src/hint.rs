@@ -65,11 +65,15 @@ pub fn handle_hint(
 
     shared_compass: &Arc<Mutex<Option<f32>>>,
     leader_id: &Arc<Mutex<Option<u32>>>,
-    shared_grid_size: &Arc<Mutex<Option<(u32, u32)>>>
+    shared_grid_size: &Arc<Mutex<Option<(u32, u32)>>>,
+    hint_received: &Arc<Mutex<bool>>
+
 
 ) {
     match hint_data {
         HintData::RelativeCompass { angle } => {
+            let mut hint_flag = hint_received.lock().unwrap();
+            *hint_flag = true;
             println!(
                 "🧭 [INFO] Boussole reçue pour le joueur {}: {:.2}° vers la sortie.",
                 player_id, angle

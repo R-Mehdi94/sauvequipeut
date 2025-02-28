@@ -5,6 +5,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 use log::warn;
+use rand::prelude::IndexedRandom;
 use common::message::actiondata::{ActionData, PlayerAction};
 use common::message::Message;
 use common::message::relativedirection::RelativeDirection;
@@ -121,6 +122,10 @@ pub fn leader_choose_action(
     if let Some((cols, rows)) = grid_size {
         println!("🗺️ [LEADER] Taille labyrinthe : {} colonnes x {} lignes.", cols, rows);
         let direction_priority = direction_from_grid_size(grid_size);
+        if is_trapped_in_island(player_id, position_tracker, tracker, radar_data) {
+            println!("🆘 [ALERTE ÎLOT] Joueur {} est coincé ! Il tente une sortie.", player_id);
+            return escape_island(player_id, radar_data, tracker, position_tracker);
+        }
 
         if let Some(direction) = choose_accessible_direction(radar_data, direction_priority) {
             if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
@@ -159,8 +164,39 @@ pub fn leader_choose_action(
         println!("⚙️ [INFO] Aucune information ➔ Stratégie plombier.");
     }
 
-    // 🚀 Dernier recours : Prendre la direction la moins visitée
+
     choose_least_visited_direction(player_id, radar_data, tracker, position_tracker)
+}
+pub fn is_trapped_in_island(
+    player_id: u32,
+    position_tracker: &HashMap<u32, (i32, i32)>,
+    tracker: &HashMap<(i32, i32), usize>,
+    radar_data: &DecodedView
+) -> bool {
+    let position = position_tracker.get(&player_id).unwrap();
+    let directions = vec![
+        RelativeDirection::Front,
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+        RelativeDirection::Back,
+    ];
+
+    let mut blocked_count = 0;
+
+    for &direction in &directions {
+        if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
+            let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+            let accessible = choose_accessible_direction(radar_data, vec![direction]).is_some();
+
+            if visit_count >= 3 || !accessible {
+                blocked_count += 1;
+            }
+        }
+    }
+
+    println!("🛑 [ÎLOT] Joueur {} a {} directions bloquées sur 4.", player_id, blocked_count);
+
+    blocked_count == 4
 }
 
 
@@ -211,6 +247,13 @@ pub fn send_action(
         thread::sleep(Duration::from_secs(2));
     }
 }
+
+
+
+
+
+
+
 pub fn estimate_position_from_walls(
     position: (i32, i32),
     grid_size: (u32, u32)
@@ -299,9 +342,7 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
 
     let left_open = *left_cell == RadarCell::Open
         && is_passage_open(radar.get_vertical_passage(1), 1);
-    println!("Bits horizontaux (ligne 1): {:06b}", radar.get_horizontal_passage(1));
-    println!("Bits verticaux (colonne 1): {:08b}", radar.get_vertical_passage(1));
-    println!("Bits verticaux (colonne 1): {:08b}", radar.get_vertical_passage(2));
+
 
     if right_open {
 
@@ -349,6 +390,8 @@ pub fn compute_absolute_position(current_pos: (i32, i32), cell_index: usize) -> 
         _ => current_pos,
     }
 }
+
+
 pub fn detect_near_border(
     position: (i32, i32),
     grid_size: (u32, u32),
@@ -414,3 +457,75 @@ pub fn find_path_to_exit(
     }
 }
 
+
+pub fn escape_island(
+    player_id: u32,
+    radar_data: &DecodedView,
+    tracker: &HashMap<(i32, i32), usize>,
+    position_tracker: &HashMap<u32, (i32, i32)>,
+)
+    -> ActionData
+{
+    println!("🚨 [ÎLOT] Joueur {} enclenche le mode ÉVASION !", player_id);
+
+    let directions = vec![
+        RelativeDirection::Front,
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+        RelativeDirection::Back,
+    ];
+
+    // Filtrer les directions possibles (évite les murs)
+    let accessible_directions: Vec<RelativeDirection> = directions
+        .into_iter()
+        .filter(|&dir| choose_accessible_direction(radar_data, vec![dir]).is_some())
+        .collect();
+
+    if accessible_directions.is_empty() {
+        println!("🛑 [ÎLOT] Aucun mouvement disponible ! Le joueur est totalement piégé.");
+        return ActionData::MoveTo(RelativeDirection::Back); // Dernier recours
+    }
+
+    // Choisir une direction parmi celles accessibles et le moins visitées
+    let mut best_direction = None;
+    let mut lowest_visits = usize::MAX;
+
+    for &direction in &accessible_directions {
+        if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
+            let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+
+            if visit_count < lowest_visits {
+                lowest_visits = visit_count;
+                best_direction = Some(direction);
+            }
+        }
+    }
+
+    if let Some(direction) = best_direction {
+        println!("🚀 [ÎLOT] Joueur {} prend la sortie {:?} avec {} visites.", player_id, direction, lowest_visits);
+        return ActionData::MoveTo(direction);
+    }
+
+    // Sélection aléatoire en dernier recours
+    let random_direction = accessible_directions.choose(&mut rand::thread_rng()).unwrap();
+    println!("🎲 [ÎLOT] Aucune option idéale, prise d'un mouvement aléatoire : {:?}", random_direction);
+    ActionData::MoveTo(*random_direction)
+}
+
+
+
+pub fn is_ping_pong(
+    player_id: u32,
+    position_tracker: &HashMap<u32, (i32, i32)>,
+    tracker: &HashMap<(i32, i32), usize>
+) -> bool {
+    let position = position_tracker.get(&player_id).unwrap();
+    let visit_count = tracker.get(position).cloned().unwrap_or(0);
+
+    if visit_count >= 5 {
+        println!("🔄 [PING-PONG] Joueur {} tourne en rond sur {:?}", player_id, position);
+        return true;
+    }
+
+    false
+}

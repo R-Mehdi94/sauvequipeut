@@ -47,6 +47,7 @@ pub fn handle_player(
     visited_tracker: Arc<Mutex<HashMap<(i32, i32), usize>>>,
     exit_position: Arc<Mutex<Option<(i32, i32)>>>,
     labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>>,
+    hint_received: Arc<Mutex<bool>>,
 ) {
     let mut stream = connect_to_server(addr, port).unwrap();
     let player_name = format!("Player_{}", player_id);
@@ -102,7 +103,9 @@ pub fn handle_player(
                             &hint_data,
                             &Arc::clone(&shared_compass),
                             &Arc::clone(&leader_id) ,
-                            &Arc::clone(&shared_grid_size)
+                            &Arc::clone(&shared_grid_size),
+                            &Arc::clone(&hint_received)
+
                         );
                     }
                 }
@@ -110,8 +113,6 @@ pub fn handle_player(
                 Message::RadarViewResult(radar_encoded) => {
                     if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
                         println!(" [DEBUG] Décode radar réussi pour le joueur {}", player_id);
-
-
 
                         let mut position_map = position_tracker.lock().unwrap();
                         let player_position = position_map.entry(player_id).or_insert((0, 0));
@@ -126,14 +127,14 @@ pub fn handle_player(
 
                         let grid_size = *shared_grid_size.lock().unwrap();
                         let compass_angle = *shared_compass.lock().unwrap();
-                        // 🔐 Stockage de la carte du labyrinthe
+
                         let mut map_lock = labyrinth_map.lock().unwrap();
                         for (index, cell) in decoded_radar.cells.iter().enumerate() {
                             let absolute_position = compute_absolute_position(current_position, index);
                             map_lock.insert(absolute_position, cell.clone());
                         }
                         drop(map_lock);
-                        // 🏁 Vérifier si une sortie a été détectée
+
                         let mut exit_lock = exit_position.lock().unwrap();
                         for (index, cell) in decoded_radar.cells.iter().enumerate() {
                             if *cell == RadarCell::Exit {
@@ -143,7 +144,24 @@ pub fn handle_player(
                             }
                         }
                         drop(exit_lock);
-                        let is_leader = {
+
+
+                        let num_connected_players = players.lock().unwrap().len();
+                        let hint_flag = *hint_received.lock().unwrap();
+
+
+                        if num_connected_players == 1 && !hint_flag {
+                            println!(" Joueur {} est seul et attend un Hint avant de devenir leader.", player_id);
+                            let action = decide_action(&decoded_radar);
+
+                            let mut position_map = position_tracker.lock().unwrap();
+                            update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
+                            send_action(player_id, action, &tx, &mut stream);
+
+                        }
+
+
+                         let is_leader = {
                             let mut leader_locked = leader_id.lock().unwrap();
                             if leader_locked.is_none() {
                                 println!("👑 [INFO] Joueur {} devient leader.", player_id);
@@ -155,7 +173,7 @@ pub fn handle_player(
                         };
 
 
-                        let action = if is_leader {
+                         let action = if is_leader {
                             println!("🟢 [LEADER] Choix de direction pour le leader.");
                             leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap(),&exit_position)
                         } else {
@@ -169,6 +187,7 @@ pub fn handle_player(
                             }
                         };
 
+                        // let action =  decide_action(&decoded_radar);
                         let mut position_map = position_tracker.lock().unwrap();
                         update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
 
