@@ -245,17 +245,17 @@ pub fn handle_player(
                             decide_action(&decoded_radar)
                         };
 
-
-
                         let mut position_map = position_tracker.lock().unwrap();
                         update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action,&mut visited_map);
-                        let new_position = *position_map.get(&player_id).unwrap();
-                        send_action(player_id, action, &tx, &mut stream);
+                         send_action(player_id, action, &tx, &mut stream);
+                        let mut leader = leader_id.lock().unwrap();
+                        *leader = None;
 
                         println!(" [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);
                     } else {
                         println!(" [ERROR] Échec du décodage radar pour le joueur {}", player_id);
                     }
+
                 }
 
 

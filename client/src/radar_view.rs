@@ -104,12 +104,7 @@ pub fn leader_choose_action(
 ) -> ActionData {
 
 
-    let current_position = *position_tracker.get(&player_id).unwrap();
-
-
-
-    let mut memories = player_memories.lock().unwrap();
-
+ let current_position = *position_tracker.get(&player_id).unwrap();
 
 
     println!("🔒 [DEBUG] Vérification de boucle avec tracker.is_recently_visited()");
