@@ -4,7 +4,8 @@ use rand::thread_rng;
 use common::message::actiondata::ActionData;
 use common::message::relativedirection::RelativeDirection;
 use crate::decrypte::DecodedView;
-use crate::radar_view::{ decide_action, simulate_movement};
+use crate::exploration_tracker::ExplorationTracker;
+use crate::radar_view::{decide_action, simulate_movement};
 
 const HISTORY_SIZE: usize = 5;
 
@@ -35,7 +36,7 @@ impl PlayerMemory {
 pub fn choose_least_visited_direction(
     player_id: u32,
     radar_data: &DecodedView,
-    tracker: &HashMap<(i32, i32), usize>,
+    tracker: &ExplorationTracker, // ✅ On passe ExplorationTracker
     position_tracker: &HashMap<u32, (i32, i32)>,
     player_memory: &mut PlayerMemory,
 ) -> ActionData {
@@ -52,7 +53,7 @@ pub fn choose_least_visited_direction(
 
     for &direction in &directions {
         if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-            let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+            let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0); // ✅ Correction ici
 
             // 🔥 Priorité aux cases moins visitées ET qui ne sont pas en boucle
             if visit_count < lowest_visits && !player_memory.history.contains(&new_position) {
@@ -75,12 +76,13 @@ pub fn choose_least_visited_direction(
 
     // 🚨 Si toutes les options sont en boucle → Prendre une direction aléatoire pour casser la boucle
     if player_memory.is_looping() {
-        println!("🔄 [ALERTE] Joueur {} détecte une boucle ! Forcer une nouvelle direction.", player_id);
-      //  return choose_random_direction_avoiding_loop(player_id, radar_data, tracker, position_tracker, player_memory);
+        println!("🔄 [ALERTE] Joueur  détecte une boucle ! Forcer une nouvelle direction.");
+        // return choose_random_direction_avoiding_loop(player_id, radar_data, tracker, position_tracker, player_memory);
     }
 
     println!("⚠️ [DIRECTION] Aucune direction optimale trouvée, retour à la stratégie plombier.");
     decide_action(radar_data)
 }
+
 
 

@@ -118,11 +118,9 @@ pub fn handle_player(
                         let mut last_radar_lock = last_radar_view.lock().unwrap();
                         *last_radar_lock = Some(decoded_radar.clone());
                         drop(last_radar_lock);
-
-                        let mut position_map = position_tracker.lock().unwrap();
+                        let mut position_map = position_tracker.lock().unwrap();  // 🔒 Verrouillage du mutex
                         let player_position = position_map.entry(player_id).or_insert((0, 0));
                         let current_position = *player_position;
-                        drop(position_map);
 
                         let mut visited_map = visited_tracker.lock().unwrap();
 

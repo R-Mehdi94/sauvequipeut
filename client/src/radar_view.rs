@@ -145,7 +145,7 @@ pub fn leader_choose_action(
 
         if let Some(direction) = choose_accessible_direction(radar_data, direction_priority) {
             if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-                let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+                let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0);
 
                 if visit_count < 2 {
                     println!("✅ [LEADER] Direction {:?} choisie avec {} visites.", direction, visit_count);
@@ -165,7 +165,7 @@ pub fn leader_choose_action(
 
         if let Some(direction) = choose_accessible_direction(radar_data, direction_priority) {
             if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-                let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+                let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0);
 
                 if visit_count < 2 {
                     println!("✅ [LEADER] Direction {:?} choisie via boussole avec {} visites.", direction, visit_count);
@@ -474,7 +474,7 @@ pub fn find_path_to_exit(
     // Trier les directions par nombre de visites (priorité aux moins visitées)
     potential_directions.sort_by_key(|dir| {
         let pos = simulate_movement(player_id, *dir, position_tracker).unwrap_or((0, 0));
-        visited_tracker.get(&pos).cloned().unwrap_or(0)
+        visited_tracker.visited_positions.get(&pos).cloned().unwrap_or(0)
     });
 
     potential_directions.first().cloned()
