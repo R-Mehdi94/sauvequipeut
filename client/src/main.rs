@@ -6,6 +6,7 @@ mod hint;
 mod position;
 mod radar_view;
 mod exploration_tracker;
+mod player_memory;
 
 use std::collections::{HashMap, HashSet};
 use crate::player::handle_player;
@@ -19,7 +20,8 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use env_logger::Env;
-use crate::challenge::TeamSecrets;
+use crate::player_memory::PlayerMemory;
+ use crate::challenge::TeamSecrets;
 use crate::decrypte::{exemple, DecodedView, RadarCell};
  fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
@@ -48,6 +50,7 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
     };
 
     let players = Arc::new(Mutex::new(Vec::new()));
+     let player_memories: Arc<Mutex<HashMap<u32, PlayerMemory>>> = Arc::new(Mutex::new(HashMap::new()));
 
      let (tx, rx) = channel();
     let team_secrets = Arc::new(TeamSecrets::new());
@@ -60,6 +63,7 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
     let exit_position = Arc::new(Mutex::new(None));
      let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
      let hint_received = Arc::new(Mutex::new(false));
+     let last_radar_view: Arc<Mutex<Option<DecodedView>>> = Arc::new(Mutex::new(None));
 
     let player_threads: Vec<_> = (0..expected_players)
         .map(|i| {
@@ -78,9 +82,11 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
             let exit_position_clone=Arc::clone(&exit_position);
             let labyrinth_map_clone=Arc::clone(&labyrinth_map);
             let hint_received_clone = Arc::clone(&hint_received);
+            let last_radar_view_clone =  Arc::clone(&last_radar_view);
+            let player_memories_clone=Arc::clone(&player_memories);
             thread::spawn(move || {
                 handle_player(i, token, &players, &addr, &port, tx,team_secrets_clone , shared_compass_clone,leader_id_clone,shared_leader_action_clone,shared_grid_size_clone,
-                              position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone,hint_received_clone);
+                              position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone,hint_received_clone,last_radar_view_clone,player_memories_clone);
             })
         })
         .collect();

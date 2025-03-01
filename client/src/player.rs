@@ -2,7 +2,6 @@ use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use crate::utils::connect_to_server;
 use common::message::actiondata::{ActionData, PlayerAction};
-use common::message::relativedirection::RelativeDirection;
 use std::net::TcpStream;
 use common::message::{Message, MessageData};
 use common::state::ClientState;
@@ -14,9 +13,9 @@ use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
 use crate::decrypte::{decode_and_format, DecodedView, RadarCell};
-use crate::hint::{ handle_hint};
-use crate::position::Position;
-use crate::radar_view::{choose_least_visited_direction, compute_absolute_position, decide_action, follower_choose_action, leader_choose_action, send_action, update_player_position};
+use crate::hint::{direction_from_angle, direction_from_grid_size, handle_hint};
+use crate::player_memory::PlayerMemory;
+use crate::radar_view::{choose_accessible_direction, compute_absolute_position, decide_action, detect_near_border, find_path_to_exit, follower_choose_action, leader_choose_action, send_action, simulate_movement, update_player_position};
 
 pub struct Player {
     pub name: String,
@@ -48,6 +47,8 @@ pub fn handle_player(
     exit_position: Arc<Mutex<Option<(i32, i32)>>>,
     labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>>,
     hint_received: Arc<Mutex<bool>>,
+    last_radar_view: Arc<Mutex<Option<DecodedView>>>,
+    player_memories: Arc<Mutex<HashMap<u32, PlayerMemory>>>,
 ) {
     let mut stream = connect_to_server(addr, port).unwrap();
     let player_name = format!("Player_{}", player_id);
@@ -113,6 +114,9 @@ pub fn handle_player(
                 Message::RadarViewResult(radar_encoded) => {
                     if let Ok(decoded_radar) = decode_and_format(&radar_encoded) {
                         println!(" [DEBUG] Décode radar réussi pour le joueur {}", player_id);
+                        let mut last_radar_lock = last_radar_view.lock().unwrap();
+                        *last_radar_lock = Some(decoded_radar.clone());
+                        drop(last_radar_lock);
 
                         let mut position_map = position_tracker.lock().unwrap();
                         let player_position = position_map.entry(player_id).or_insert((0, 0));
@@ -120,10 +124,6 @@ pub fn handle_player(
                         drop(position_map);
 
                         let mut visited_map = visited_tracker.lock().unwrap();
-                        let visit_count = visited_map.entry(current_position).or_insert(0);
-                        *visit_count += 1;
-
-                        println!(" [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
 
                         let grid_size = *shared_grid_size.lock().unwrap();
                         let compass_angle = *shared_compass.lock().unwrap();
@@ -147,51 +147,120 @@ pub fn handle_player(
 
 
                         let num_connected_players = players.lock().unwrap().len();
-                        let hint_flag = *hint_received.lock().unwrap();
+
+                        let leader_exists = {
+                            let players_locked = players.lock().unwrap();
+                            let leader_locked = leader_id.lock().unwrap();
+
+                            match *leader_locked {
+                                Some(leader_index) => {
+                                    if players_locked.get(leader_index as usize).is_some() {
+                                        println!("✅ [INFO] Leader {} est toujours actif.", leader_index);
+                                        true
+                                    } else {
+                                        println!("⚠️ [INFO] Leader {} a quitté la partie ou a atteint la sortie !", leader_index);
+                                        false
+                                    }
+                                }
+                                None => false,
+                            }
+                        };
+ /*
+                        let action = if num_connected_players == 1 {
+                            println!("🧑‍🚀 Joueur {} est seul et suit sa propre stratégie.", player_id);
+
+                             if let Some(exit_pos) = *exit_position.lock().unwrap() {
+                                if let Some(direction) = find_path_to_exit(player_id, &position_tracker.lock().unwrap(), exit_pos) {
+                                    println!("🚀 [SORTIE] Joueur {} se dirige vers {:?}", player_id, direction);
+                                    last_direction = Some(direction);
+                                      ActionData::MoveTo(direction);
+                                } else {
+                                    println!("❌ [SORTIE] Impossible de déterminer un chemin vers la sortie !");
+                                }
+                            }
 
 
-                        if num_connected_players == 1 && !hint_flag {
-                            println!(" Joueur {} est seul et attend un Hint avant de devenir leader.", player_id);
-                            let action = decide_action(&decoded_radar);
+                            else if let Some((cols, rows)) = grid_size {
 
-                            let mut position_map = position_tracker.lock().unwrap();
-                            update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
-                            send_action(player_id, action, &tx, &mut stream);
 
+                                    println!("🗺️ [INFO] Joueur {} détecte un labyrinthe de {}x{}.", player_id, cols, rows);
+
+                                    let direction_priority = direction_from_grid_size(grid_size);
+                                    println!("➡️ [GRID PRIORITY] Direction suggérée : {:?}", direction_priority);
+
+                                    if let Some(direction) = choose_accessible_direction(&decoded_radar, direction_priority) {
+                                        if let Some(new_position) = simulate_movement(player_id, direction, &position_tracker.lock().unwrap()) {
+                                            let visit_count = visited_map.get(&new_position).cloned().unwrap_or(0);
+
+                                            if visit_count < 3 {
+                                                println!("✅ [GRID] Direction {:?} choisie avec {} visites.", direction, visit_count);
+                                                  ActionData::MoveTo(direction);
+                                            }
+                                        }
+                                    }
+                                    println!("🧱 [GRID FAIL] Aucune bonne direction trouvée avec GridSize.");
+                                }
+                                println!("🧱 [GRID FAIL] Aucune bonne direction trouvée avec GridSize.");
+
+
+
+                            if let Some(angle) = compass_angle {
+                                let direction_priority = direction_from_angle(angle);
+                                if let Some(direction) = choose_accessible_direction(&decoded_radar, direction_priority) {
+                                    println!("🧭 [BOUSSOLE] Joueur {} suit la direction {:?}", player_id, direction);
+                                      ActionData::MoveTo(direction);
+                                }
+                            }
+
+
+                            println!("🌍 [DERNIER RECOURS] Joueur {} explore une nouvelle direction.", player_id);
+                            decide_action(&decoded_radar)
                         }
+*/
 
 
-                         let is_leader = {
-                            let mut leader_locked = leader_id.lock().unwrap();
-                            if leader_locked.is_none() {
-                                println!("👑 [INFO] Joueur {} devient leader.", player_id);
-                                *leader_locked = Some(player_id);
-                                true
-                            } else {
-                                leader_locked.map_or(false, |id| id == player_id)
-                            }
-                        };
 
-
-                         let action = if is_leader {
-                            println!("🟢 [LEADER] Choix de direction pour le leader.");
-                            leader_choose_action(player_id, &decoded_radar, grid_size, compass_angle, &visited_map, &position_tracker.lock().unwrap(),&exit_position)
+                        let action =   if leader_exists && Some(player_id) == *leader_id.lock().unwrap() {
+                            println!("🟢 [LEADER] Joueur {} agit en tant que leader.", player_id);
+                            leader_choose_action(
+                                player_id,
+                                &decoded_radar,
+                                grid_size,
+                                compass_angle,
+                                &visited_map,
+                                &position_tracker.lock().unwrap(),
+                                &exit_position,
+                                &player_memories
+                            )
+                        } else if leader_exists  && num_connected_players>1{
+                            println!("🔵 [FOLLOWER] Joueur {} suit le leader.", player_id);
+                            follower_choose_action(
+                                player_id,
+                                &decoded_radar,
+                                &shared_leader_action
+                            )
                         } else {
-                            let leader_exists = leader_id.lock().unwrap().is_some();
-                            if leader_exists {
-                                println!("🔵 [FOLLOWER] Suivi du leader.");
-                                follower_choose_action(player_id, &decoded_radar, &shared_leader_action)
-                            } else {
-                                println!("⚠️ [INFO] Aucun leader encore défini, stratégie plombier.");
-                                decide_action(&decoded_radar)
-                            }
+                            println!("⚠️ [INFO] Aucun leader actif, Joueur {} agit individuellement.", player_id);
+                            decide_action(&decoded_radar)
                         };
 
-                        // let action =  decide_action(&decoded_radar);
+
+
+
                         let mut position_map = position_tracker.lock().unwrap();
                         update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
+                        let visit_count = visited_map.entry(current_position).or_insert(0);
+                        *visit_count += 1;
 
-                        println!(" [ENVOI] Action du joueur {} : {:?}", player_id, action);
+                        println!(" [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
+/*
+                        println!("🗺️ [DEBUG] Carte mémorisée :");
+                        let map_lock = labyrinth_map.lock().unwrap();
+                        for (position, cell) in map_lock.iter() {
+                            println!("📍 Position: {:?} → Cellule: {:?}", position, cell);
+                        }
+                        println!("🗺️ [DEBUG] Fin de l'affichage de la carte.");
+*/
                         send_action(player_id, action, &tx, &mut stream);
 
                         println!(" [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);
@@ -213,8 +282,43 @@ pub fn handle_player(
                             }
                         }
                         ActionError::CannotPassThroughWall => {
+                            println!("🚧 [ERREUR] Joueur {} a tenté de passer à travers un mur !", player_id);
 
+                         /*   // 🔄 Choisir une direction aléatoire (par défaut)
+                            let mut rng = rand::thread_rng();
+                            let random_direction = match rng.gen_range(0..4) {
+                                0 => RelativeDirection::Front,
+                                1 => RelativeDirection::Right,
+                                2 => RelativeDirection::Left,
+                                _ => RelativeDirection::Back,
+                            };
+
+                            println!("🔀 [RANDOM] Joueur {} essaie une autre direction : {:?}", player_id, random_direction);
+
+
+                            if let Some(last_radar) = last_radar_view.lock().unwrap().as_ref() {
+                                if let Some(direction) = choose_accessible_direction(last_radar, vec![random_direction]) {
+                                    println!("✅ [NOUVELLE DIRECTION] Joueur {} se dirige vers {:?}", player_id, direction);
+                                  let action = ActionData::MoveTo(direction);
+
+                                    let mut position_map = position_tracker.lock().unwrap();
+                                    update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
+
+
+                                    send_action(player_id, action, &tx, &mut stream);
+                                } else {
+                                    println!("⚠️ [ERREUR] Aucune direction accessible trouvée, tentative avec un mouvement aléatoire.");
+                                    let action = ActionData::MoveTo(random_direction);
+
+                                    let mut position_map = position_tracker.lock().unwrap();
+                                    update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
+                                    send_action(player_id, action, &tx, &mut stream);
+                                }
+                            }
+
+*/
                         }
+
                         _ => {
                             println!("⚠️ [ERREUR NON GÉRÉE] : {:?}", error);
                         }
