@@ -13,6 +13,7 @@ use common::message::hintdata::HintData;
 use common::message::message::ActionError;
 use crate::challenge::{handle_challenge, TeamSecrets};
 use crate::decrypte::{decode_and_format, DecodedView, RadarCell};
+use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{direction_from_angle, direction_from_grid_size, handle_hint};
 use crate::player_memory::PlayerMemory;
 use crate::radar_view::{choose_accessible_direction, compute_absolute_position, decide_action, detect_near_border, find_path_to_exit, follower_choose_action, leader_choose_action, send_action, simulate_movement, update_player_position};
@@ -43,7 +44,7 @@ pub fn handle_player(
     shared_leader_action: Arc<Mutex<Option<ActionData>>>,
     shared_grid_size: Arc<Mutex<Option<(u32, u32)>>>,
     position_tracker: Arc<Mutex<HashMap<u32, (i32, i32)>>>,
-    visited_tracker: Arc<Mutex<HashMap<(i32, i32), usize>>>,
+    visited_tracker: Arc<Mutex<ExplorationTracker>>,
     exit_position: Arc<Mutex<Option<(i32, i32)>>>,
     labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>>,
     hint_received: Arc<Mutex<bool>>,
@@ -247,13 +248,22 @@ pub fn handle_player(
 
 
 
-                        let mut position_map = position_tracker.lock().unwrap();
                         update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
-                        let visit_count = visited_map.entry(current_position).or_insert(0);
-                        *visit_count += 1;
+                        let new_position = *position_map.get(&player_id).unwrap(); // Obtenir la nouvelle position
 
-                        println!(" [POSITION] Joueur {} est en {:?}, visité {} fois", player_id, current_position, *visit_count);
-/*
+                        let mut tracker = visited_tracker.lock().unwrap();
+                        tracker.mark_position(new_position); // Ajoute la position visitée
+
+                        println!(
+                            " [POSITION] Joueur {} est en {:?}, visité {} fois",
+                            player_id,
+                            new_position,
+                            tracker.visited_positions.get(&new_position).unwrap_or(&0)
+                        );
+
+
+
+ /*
                         println!("🗺️ [DEBUG] Carte mémorisée :");
                         let map_lock = labyrinth_map.lock().unwrap();
                         for (position, cell) in map_lock.iter() {

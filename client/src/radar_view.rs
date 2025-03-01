@@ -12,6 +12,7 @@ use common::message::Message;
 use common::message::relativedirection::RelativeDirection;
 use common::utils::utils::send_message;
 use crate::decrypte::{decode_and_format, is_passage_open, DecodedView, RadarCell};
+use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 use crate::player_memory::{choose_least_visited_direction, PlayerMemory};
 
@@ -106,7 +107,7 @@ pub fn leader_choose_action(
     radar_data: &DecodedView,
     grid_size: Option<(u32, u32)>,
     compass_angle: Option<f32>,
-    tracker: &HashMap<(i32, i32), usize>,
+    tracker: &ExplorationTracker,
     position_tracker: &HashMap<u32, (i32, i32)>,
     exit_position: &Arc<Mutex<Option<(i32, i32)>>>,
     player_memories: &Arc<Mutex<HashMap<u32, PlayerMemory>>>,
@@ -116,10 +117,9 @@ pub fn leader_choose_action(
     let mut memories = player_memories.lock().unwrap();
     let memory = memories.entry(player_id).or_insert(PlayerMemory::new(5));
 
-
-    if memory.is_looping() {
+    if memory.is_looping() || tracker.is_recently_visited(current_position) {
         println!("🔄 [ALERTE] Joueur {} est coincé dans une boucle ! Changement de stratégie...", player_id);
-       return  choose_least_visited_direction(player_id,radar_data,tracker,position_tracker,memory)
+       // return choose_random_direction_avoiding_loop(player_id, radar_data, tracker, position_tracker);
     }
 
      if let Some(exit_pos) = *exit_position.lock().unwrap() {
@@ -452,7 +452,7 @@ pub fn find_path_to_exit(
     player_id: u32,
     position_tracker: &HashMap<u32, (i32, i32)>,
     exit_position: (i32, i32),
-    visited_tracker: &HashMap<(i32, i32), usize>
+    visited_tracker:&ExplorationTracker
 ) -> Option<RelativeDirection> {
     let current_position = position_tracker.get(&player_id)?;
     let dx = exit_position.0 - current_position.0;

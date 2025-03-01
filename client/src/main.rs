@@ -23,7 +23,9 @@ use env_logger::Env;
 use crate::player_memory::PlayerMemory;
  use crate::challenge::TeamSecrets;
 use crate::decrypte::{exemple, DecodedView, RadarCell};
- fn main() -> Result<(), MyError> {
+use crate::exploration_tracker::ExplorationTracker;
+
+fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
     let addr = "localhost";
     let port = "8778";
@@ -59,7 +61,7 @@ use crate::decrypte::{exemple, DecodedView, RadarCell};
     let shared_leader_action = Arc::new(Mutex::new(None));
     let shared_grid_size = Arc::new(Mutex::new(None));
     let position_tracker = Arc::new(Mutex::new(HashMap::new()));
-    let visited_tracker = Arc::new(Mutex::new(HashMap::new()));
+     let visited_tracker = Arc::new(Mutex::new(ExplorationTracker::new()));
     let exit_position = Arc::new(Mutex::new(None));
      let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
      let hint_received = Arc::new(Mutex::new(false));
