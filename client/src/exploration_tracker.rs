@@ -20,17 +20,23 @@ impl ExplorationTracker {
         *count += 1;
 
         self.last_positions.push(position);
-        if self.last_positions.len() > 5 { // Garde les 5 dernières positions
+        if self.last_positions.len() > 8 { // Garde les 5 dernières positions
             self.last_positions.remove(0);
         }
 
-        // Détection de boucle : 3 mêmes positions répétées
+        // 🔄 Détection de boucle : 3 mêmes positions répétées
         if self.last_positions.len() >= 3 && self.last_positions[0] == self.last_positions[2] {
             println!("🔄 [ALERTE] Boucle détectée à {:?}", position);
         }
+
+        // 📌 DEBUG: Affichage complet des dernières positions
+        println!("📌 [DEBUG] État de last_positions: {:?}", self.last_positions);
     }
 
+
     pub fn is_recently_visited(&self, position: (i32, i32)) -> bool {
+        println!("🔍 [DEBUG] Vérification de la position {} dans is_recently_visited() {}", position.0, position.1);
         self.last_positions.contains(&position)
     }
+
 }

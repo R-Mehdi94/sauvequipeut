@@ -118,13 +118,13 @@ pub fn handle_player(
                         let mut last_radar_lock = last_radar_view.lock().unwrap();
                         *last_radar_lock = Some(decoded_radar.clone());
                         drop(last_radar_lock);
-                        let mut position_map = position_tracker.lock().unwrap();  // 🔒 Verrouillage du mutex
+                        let mut position_map = position_tracker.lock().unwrap();  // 🔒 Verrouillage
                         let player_position = position_map.entry(player_id).or_insert((0, 0));
                         let current_position = *player_position;
-
+                        drop(position_map);
                         let mut visited_map = visited_tracker.lock().unwrap();
 
-                        let grid_size = *shared_grid_size.lock().unwrap();
+                         let grid_size = *shared_grid_size.lock().unwrap();
                         let compass_angle = *shared_compass.lock().unwrap();
 
                         let mut map_lock = labyrinth_map.lock().unwrap();
@@ -219,18 +219,20 @@ pub fn handle_player(
 
 
 
-                        let action =   if leader_exists && Some(player_id) == *leader_id.lock().unwrap() {
-                            println!("🟢 [LEADER] Joueur {} agit en tant que leader.", player_id);
-                            leader_choose_action(
-                                player_id,
-                                &decoded_radar,
-                                grid_size,
-                                compass_angle,
-                                &visited_map,
-                                &position_tracker.lock().unwrap(),
-                                &exit_position,
-                                &player_memories
-                            )
+                        let action =
+                            if leader_exists && Some(player_id) == *leader_id.lock().unwrap() {
+                                     println!("🟢 [LEADER] Joueur {} agit en tant que leader.", player_id);
+                                    leader_choose_action(
+                                        player_id,
+                                        &decoded_radar,
+                                        grid_size,
+                                        compass_angle,
+                                        &visited_map,
+                                        &position_tracker.lock().unwrap(),
+                                        &exit_position,
+                                        &player_memories
+                                    )
+
                         } else if leader_exists  && num_connected_players>1{
                             println!("🔵 [FOLLOWER] Joueur {} suit le leader.", player_id);
                             follower_choose_action(
@@ -245,30 +247,9 @@ pub fn handle_player(
 
 
 
-
-                        update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action);
-                        let new_position = *position_map.get(&player_id).unwrap(); // Obtenir la nouvelle position
-
-                        let mut tracker = visited_tracker.lock().unwrap();
-                        tracker.mark_position(new_position); // Ajoute la position visitée
-
-                        println!(
-                            " [POSITION] Joueur {} est en {:?}, visité {} fois",
-                            player_id,
-                            new_position,
-                            tracker.visited_positions.get(&new_position).unwrap_or(&0)
-                        );
-
-
-
- /*
-                        println!("🗺️ [DEBUG] Carte mémorisée :");
-                        let map_lock = labyrinth_map.lock().unwrap();
-                        for (position, cell) in map_lock.iter() {
-                            println!("📍 Position: {:?} → Cellule: {:?}", position, cell);
-                        }
-                        println!("🗺️ [DEBUG] Fin de l'affichage de la carte.");
-*/
+                        let mut position_map = position_tracker.lock().unwrap();
+                        update_player_position(player_id, position_map.get_mut(&player_id).unwrap(), &action,&mut visited_map);
+                        let new_position = *position_map.get(&player_id).unwrap();
                         send_action(player_id, action, &tx, &mut stream);
 
                         println!(" [DEBUG] Fin de traitement du radar pour le joueur {}", player_id);

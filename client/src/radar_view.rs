@@ -22,18 +22,8 @@ pub fn calculate_position(player_id: u32, radar_data: &DecodedView) -> (i32, i32
     let y = (player_id as i32 / 10) % 10;
     (x, y)
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub fn determine_leader(player_id: u32, leader_id: &Arc<Mutex<Option<u32>>>) -> bool {
-    let mut leader_locked = leader_id.lock().unwrap();
-    if leader_locked.is_none() {
-        println!("👑 [LEADER] Le joueur {} devient temporairement leader.", player_id);
-        *leader_locked = Some(player_id);
-        true
-    } else {
-        leader_locked.map_or(false, |id| id == player_id)
-    }
-}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
 pub fn choose_least_visited_direction(
@@ -111,17 +101,24 @@ pub fn leader_choose_action(
     position_tracker: &HashMap<u32, (i32, i32)>,
     exit_position: &Arc<Mutex<Option<(i32, i32)>>>,
     player_memories: &Arc<Mutex<HashMap<u32, PlayerMemory>>>,
-
 ) -> ActionData {
+    println!("⚙️ [INFO] Entrée dans leader_choose_action pour le joueur {}", player_id);
+
+    println!("🔒 [DEBUG] Tentative d'accès à position_tracker");
     let current_position = *position_tracker.get(&player_id).unwrap();
+    println!("✅ [DEBUG] Position actuelle récupérée: {:?}", current_position);
+
+    println!("🔒 [DEBUG] Tentative d'accès à player_memories");
     let mut memories = player_memories.lock().unwrap();
+    println!("✅ [DEBUG] player_memories lock acquis");
+
     let memory = memories.entry(player_id).or_insert(PlayerMemory::new(5));
 
+    println!("🔒 [DEBUG] Vérification de boucle avec tracker.is_recently_visited()");
     if memory.is_looping() || tracker.is_recently_visited(current_position) {
         println!("🔄 [ALERTE] Joueur {} est coincé dans une boucle ! Changement de stratégie...", player_id);
-       // return choose_random_direction_avoiding_loop(player_id, radar_data, tracker, position_tracker);
+        return choose_least_visited_direction(player_id, radar_data, tracker, position_tracker, memory);
     }
-
      if let Some(exit_pos) = *exit_position.lock().unwrap() {
         println!("🚪 [INFO] Joueur {} sait où est la sortie en {:?}", player_id, exit_pos);
         if let Some(direction) = find_path_to_exit(player_id, position_tracker, exit_pos,tracker) {
@@ -352,11 +349,11 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
     }
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 pub fn update_player_position(
     player_id: u32,
     player_position: &mut (i32, i32),
-    action: &ActionData
+    action: &ActionData,
+    tracker: &mut ExplorationTracker,  // Ajout du tracker ici
 ) {
     if let ActionData::MoveTo(direction) = action {
         match direction {
@@ -366,8 +363,12 @@ pub fn update_player_position(
             RelativeDirection::Back => player_position.1 += 1,
         }
         println!("📍 [POSITION] Joueur {} se déplace vers {:?}", player_id, player_position);
+
+        // 📌 Enregistre la nouvelle position dans le tracker
+        tracker.mark_position(*player_position);
     }
 }
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
