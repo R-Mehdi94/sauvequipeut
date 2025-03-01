@@ -227,7 +227,7 @@ pub fn handle_player(
                                         &decoded_radar,
                                         grid_size,
                                         compass_angle,
-                                        &visited_map,
+                                        &mut visited_map,
                                         &position_tracker.lock().unwrap(),
                                         &exit_position,
                                         &player_memories
