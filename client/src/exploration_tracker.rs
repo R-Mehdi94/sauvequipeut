@@ -22,27 +22,31 @@ impl ExplorationTracker {
         let count = self.visited_positions.entry(position).or_insert(0);
         *count += 1;
 
+        println!("📝 [DEBUG] Ajout de la position {:?} avec direction {:?}", position, direction);
+        println!("📌 [DEBUG] Avant ajout, last_positions: {:?}", self.last_positions);
+
         self.last_positions.push(position);
-        if self.last_positions.len() > 8 { // Garde les 8 dernières positions
+        if self.last_positions.len() > 8 {
             self.last_positions.remove(0);
         }
 
-        // 🔄 Mise à jour de la dernière direction
         self.last_direction = Some(direction);
 
-        // 🔄 Détection de boucle
-        if self.last_positions.len() >= 3 && self.last_positions[0] == self.last_positions[2] {
+        if self.last_positions.len() >= 3 && self.last_positions[..self.last_positions.len() - 1].contains(&position) {
             println!("🔄 [ALERTE] Boucle détectée à {:?}", position);
         }
 
-        // 📌 DEBUG: Affichage complet des dernières positions et direction
-        println!("📌 [DEBUG] État de last_positions: {:?}", self.last_positions);
+        println!("📌 [DEBUG] Après ajout, last_positions: {:?}", self.last_positions);
         println!("➡️ [DEBUG] Dernière direction prise : {:?}", self.last_direction);
     }
 
     pub fn is_recently_visited(&self, position: (i32, i32)) -> bool {
+        if self.last_positions.len() < 5 {
+            return false;
+        }
         println!("🔍 [DEBUG] Vérification de la position {} dans is_recently_visited() {}", position.0, position.1);
-        self.last_positions.contains(&position)
+        self.last_positions[..self.last_positions.len() - 1].contains(&position)
     }
+
 
 }
