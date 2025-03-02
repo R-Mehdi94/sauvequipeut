@@ -7,7 +7,7 @@ mod position;
 mod radar_view;
 mod exploration_tracker;
 
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use crate::player::handle_player;
 use crate::utils::connect_to_server;
 use common::message::actiondata::PlayerAction;
@@ -17,42 +17,22 @@ use common::utils::my_error::MyError;
 use common::utils::utils::*;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
-use std::{env, thread};
-use std::thread::sleep;
-use std::time::Duration;
+use std::thread;
 use env_logger::Env;
 use crate::challenge::TeamSecrets;
-use crate::decrypte::{RadarCell};
- fn main() -> Result<(), MyError> {
+use crate::decrypte::{ RadarCell};
+use crate::exploration_tracker::ExplorationTracker;
+
+fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
-
-
-     let args: Vec<String> = env::args().collect();
-
-     if args.len() < 2 {
-         eprintln!("Usage: client [server_address] [port (DEFAULT 8778)]");
-         return Ok(());
-     }
-
-     let addr = &args[1];
-     let mut port = "8778";
-     if args.len() == 3 {
-         port = &args[2];
-     }
-
-    //let addr = "localhost";
-     //let port = "8778";
-
+    let addr = "localhost";
+    let port = "8778";
 
     let mut stream = connect_to_server(addr, port)?;
 
     let mut state = ClientState::default();
 
-     let mut line = String::new();
-     println!("Enter your team name :");
-     std::io::stdin().read_line(&mut line)?;
-     let team_name = line.trim().to_string();
-
+    let team_name = "curious_broccoli".to_string();
     let message = build_message(MessageData::RegisterTeam { name: team_name })?;
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -69,34 +49,18 @@ use crate::decrypte::{RadarCell};
         return Ok(());
     };
 
-     println!("Nombre de joueurs : {}",expected_players);
-
-     sleep(Duration::from_secs(2));
-     println!("{}", "⚠️ Sortez vite du labyrinthe avant que...");
-     sleep(Duration::from_secs(5));
-
-     println!("La partie commence dans :");
-
-     for i in (0..3).rev() {
-         println!("{}", i+1 );
-         sleep(Duration::from_secs(1));
-     }
-
-     println!("{}", "🏁 GO GO GO !");
-     sleep(Duration::from_secs(2));
-
     let players = Arc::new(Mutex::new(Vec::new()));
 
-     let (tx, rx) = channel();
+    let (tx, rx) = channel();
     let team_secrets = Arc::new(TeamSecrets::new());
     let shared_compass = Arc::new(Mutex::new(None));
     let leader_id = Arc::new(Mutex::new(None));
     let shared_leader_action = Arc::new(Mutex::new(None));
     let shared_grid_size = Arc::new(Mutex::new(None));
     let position_tracker = Arc::new(Mutex::new(HashMap::new()));
-    let visited_tracker = Arc::new(Mutex::new(HashMap::new()));
+    let visited_tracker = Arc::new(Mutex::new(ExplorationTracker::new()));
     let exit_position = Arc::new(Mutex::new(None));
-     let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
+    let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
 
 
     let player_threads: Vec<_> = (0..expected_players)
@@ -115,6 +79,7 @@ use crate::decrypte::{RadarCell};
             let visited_tracker_clone = Arc::clone(&visited_tracker);
             let exit_position_clone=Arc::clone(&exit_position);
             let labyrinth_map_clone=Arc::clone(&labyrinth_map);
+
             thread::spawn(move || {
                 handle_player(i, token, &players, &addr, &port, tx,team_secrets_clone , shared_compass_clone,leader_id_clone,shared_leader_action_clone,shared_grid_size_clone,
                               position_tracker_clone,visited_tracker_clone,exit_position_clone,labyrinth_map_clone);
@@ -135,7 +100,7 @@ use crate::decrypte::{RadarCell};
 }
 
 fn game_coordinator(rx: Receiver<PlayerAction>, player_count: u32) {
-    let active_players = player_count;
+    let mut active_players = player_count;
 
     while active_players > 0 {
         if let Ok(action) = rx.recv() {

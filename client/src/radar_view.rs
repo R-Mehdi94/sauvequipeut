@@ -1,59 +1,50 @@
 use std::collections::HashMap;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 use log::warn;
+use rand::prelude::IndexedRandom;
 use common::message::actiondata::{ActionData, PlayerAction};
 use common::message::Message;
 use common::message::relativedirection::RelativeDirection;
 use common::utils::utils::send_message;
-use crate::decrypte::{is_passage_open, DecodedView, RadarCell};
+use crate::decrypte::{decode_and_format, is_passage_open, DecodedView, RadarCell};
+use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 
 
-
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn choose_least_visited_direction(
     player_id: u32,
     radar_data: &DecodedView,
-    tracker: &HashMap<(i32, i32), usize>,
+    tracker: &mut ExplorationTracker,
     position_tracker: &HashMap<u32, (i32, i32)>,
 ) -> ActionData {
-    let directions = vec![
-        RelativeDirection::Front,
-        RelativeDirection::Right,
-        RelativeDirection::Left,
-        RelativeDirection::Back,
-    ];
 
     let mut best_direction = None;
     let mut lowest_visits = usize::MAX;
 
-    for direction in directions {
-        if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-            let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
-
+    for direction in &[RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back] {
+        if let Some(new_position) = simulate_movement(player_id, *direction, position_tracker) {
+            let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0);
             if visit_count < lowest_visits {
                 lowest_visits = visit_count;
-                best_direction = Some(direction);
+                best_direction = Some(*direction);
             }
         }
     }
 
     if let Some(direction) = best_direction {
-        println!(
-            "✅ [DIRECTION] Joueur {} choisit {:?} avec {} visites",
-            player_id, direction, lowest_visits
-        );
         return ActionData::MoveTo(direction);
     }
 
-    println!("⚠️ [DIRECTION] Aucune direction optimale trouvée, retour à la stratégie plombier.");
+    println!("⚠️ [DIRECTION] Aucune direction optimale trouvée, activation de la stratégie plombier.");
     decide_action(radar_data)
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn simulate_movement(
     player_id: u32,
     direction: RelativeDirection,
@@ -74,18 +65,26 @@ pub fn simulate_movement(
 
     Some(new_position)
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn leader_choose_action(
     player_id: u32,
     radar_data: &DecodedView,
     grid_size: Option<(u32, u32)>,
     compass_angle: Option<f32>,
-    tracker: &HashMap<(i32, i32), usize>,
+    tracker: &mut ExplorationTracker,
     position_tracker: &HashMap<u32, (i32, i32)>,
     exit_position: &Arc<Mutex<Option<(i32, i32)>>>,
 ) -> ActionData {
     let current_position = *position_tracker.get(&player_id).unwrap();
+    if tracker.is_recently_visited(current_position) {
+        println!("🔄 [ALERTE] Joueur {} est coincé dans une boucle ! Recherche d'un nouveau chemin...", player_id);
 
-     if let Some(exit_pos) = *exit_position.lock().unwrap() {
+        choose_least_visited_direction(player_id, radar_data, tracker, position_tracker);
+
+    }
+    //  **Vérifier si on connaît la sortie**
+    if let Some(exit_pos) = *exit_position.lock().unwrap() {
         println!("🚪 [INFO] Joueur {} sait où est la sortie en {:?}", player_id, exit_pos);
         if let Some(direction) = find_path_to_exit(player_id, position_tracker, exit_pos) {
             println!("🚀 [SORTIE] Joueur {} se dirige vers {:?}", player_id, direction);
@@ -93,21 +92,21 @@ pub fn leader_choose_action(
         }
     }
 
-     if let Some(grid) = grid_size {
+    if let Some(grid) = grid_size {
         let near_borders = detect_near_border(current_position, grid);
         if !near_borders.is_empty() {
             println!("🏁 [INFO] Joueur {} proche d'un bord. Stratégie ajustée.", player_id);
         }
     }
 
-    // 🗺️ Exploration basée sur la taille du labyrinthe
+    // 🗺️ **Exploration basée sur la taille du labyrinthe**
     if let Some((cols, rows)) = grid_size {
         println!("🗺️ [LEADER] Taille labyrinthe : {} colonnes x {} lignes.", cols, rows);
         let direction_priority = direction_from_grid_size(grid_size);
 
         if let Some(direction) = choose_accessible_direction(radar_data, direction_priority) {
             if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-                let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+                let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0);
 
                 if visit_count < 3 {
                     println!("✅ [LEADER] Direction {:?} choisie avec {} visites.", direction, visit_count);
@@ -120,14 +119,14 @@ pub fn leader_choose_action(
         println!("🧱 [FALLBACK] GridSize échoué ➔ Tentative avec la boussole.");
     }
 
-    // 🧭 Si on a la boussole, on essaye de l'utiliser
+    // 🧭 **Si on a la boussole, on essaye de l'utiliser**
     if let Some(angle) = compass_angle {
         println!("🧭 [LEADER] Utilisation de la boussole : {:.2}°", angle);
         let direction_priority = direction_from_angle(angle);
 
         if let Some(direction) = choose_accessible_direction(radar_data, direction_priority) {
             if let Some(new_position) = simulate_movement(player_id, direction, position_tracker) {
-                let visit_count = tracker.get(&new_position).cloned().unwrap_or(0);
+                let visit_count = tracker.visited_positions.get(&new_position).cloned().unwrap_or(0);
 
                 if visit_count < 3 {
                     println!("✅ [LEADER] Direction {:?} choisie via boussole avec {} visites.", direction, visit_count);
@@ -142,10 +141,14 @@ pub fn leader_choose_action(
         println!("⚙️ [INFO] Aucune information ➔ Stratégie plombier.");
     }
 
-    // 🚀 Dernier recours : Prendre la direction la moins visitée
-    choose_least_visited_direction(player_id, radar_data, tracker, position_tracker)
+    // 🚀 **Dernier recours : Prendre la direction la moins visitée**
+    println!("🔄 [INFO] Aucun choix évident, recours à la direction la moins visitée.");
+    //choose_least_visited_direction(player_id, radar_data, tracker, position_tracker)
+    decide_action(radar_data)
+
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn follower_choose_action(
     player_id: u32,
     radar_data: &DecodedView,
@@ -172,6 +175,7 @@ pub fn follower_choose_action(
     decide_action(radar_data)
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn send_action(
     player_id: u32,
     action: ActionData,
@@ -184,12 +188,12 @@ pub fn send_action(
     }).unwrap();
 
     if let Err(e) = send_message(stream, &Message::Action(action)) {
-        warn!("🔄 Tentative de reconnexion dans 2 secondes... {:?}",e);
+        warn!("🔄 Tentative de reconnexion dans 2 secondes...");
         thread::sleep(Duration::from_secs(2));
     }
 }
 
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<RelativeDirection>) -> Option<RelativeDirection> {
     for direction in directions {
         let accessible = match direction {
@@ -222,6 +226,7 @@ pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<Relative
     None
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn follow_leader_direction(radar: &DecodedView, leader_direction: RelativeDirection) -> Option<RelativeDirection> {
     let direction_priority = match leader_direction {
         RelativeDirection::Front => vec![RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back],
@@ -233,11 +238,13 @@ pub fn follow_leader_direction(radar: &DecodedView, leader_direction: RelativeDi
     choose_accessible_direction(radar, direction_priority)
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn decide_action(radar: &DecodedView) -> ActionData {
     let front_cell = &radar.cells[1];
     let right_cell = &radar.cells[5];
     let left_cell = &radar.cells[3];
-    println!("radar reçu {:?}",radar);
+    let back_open = true;
+    println!("radar recu {:?}",radar);
 
     println!(
         "🔍 [DEBUG] Vérification des cellules : Front={:?}, Right={:?}, Left={:?}",
@@ -271,10 +278,12 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn update_player_position(
     player_id: u32,
     player_position: &mut (i32, i32),
-    action: &ActionData
+    action: &ActionData,
+    tracker: &mut ExplorationTracker,
 ) {
     if let ActionData::MoveTo(direction) = action {
         match direction {
@@ -284,10 +293,13 @@ pub fn update_player_position(
             RelativeDirection::Back => player_position.1 += 1,
         }
         println!("📍 [POSITION] Joueur {} se déplace vers {:?}", player_id, player_position);
+        tracker.mark_position(*player_position,*direction);
+
     }
+
 }
 
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn compute_absolute_position(current_pos: (i32, i32), cell_index: usize) -> (i32, i32) {
     match cell_index {
         0 => (current_pos.0 - 1, current_pos.1 - 1), // Haut gauche
@@ -298,10 +310,12 @@ pub fn compute_absolute_position(current_pos: (i32, i32), cell_index: usize) -> 
         5 => (current_pos.0 + 1, current_pos.1),     // Droite
         6 => (current_pos.0 - 1, current_pos.1 + 1), // Bas gauche
         7 => (current_pos.0, current_pos.1 + 1),     // Bas
-        8 => (current_pos.0 + 1, current_pos.1 + 1), // Bas droit
+        8 => (current_pos.0 + 1, current_pos.1 + 1), // Bas droite
         _ => current_pos,
     }
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn detect_near_border(
     position: (i32, i32),
     grid_size: (u32, u32),
@@ -331,7 +345,7 @@ pub fn detect_near_border(
     directions
 }
 
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn find_path_to_exit(
     player_id: u32,
     position_tracker: &HashMap<u32, (i32, i32)>,
@@ -344,16 +358,15 @@ pub fn find_path_to_exit(
 
     if dx.abs() > dy.abs() {
         if dx > 0 {
-             Some(RelativeDirection::Right)
+            Some(RelativeDirection::Right)
         } else {
-             Some(RelativeDirection::Left)
+            Some(RelativeDirection::Left)
         }
     } else {
         if dy > 0 {
-             Some(RelativeDirection::Back)
+            Some(RelativeDirection::Back)
         } else {
-             Some(RelativeDirection::Front)
+            Some(RelativeDirection::Front)
         }
     }
 }
-
