@@ -1,10 +1,25 @@
 use std::sync::{Arc, Mutex};
 use common::message::hintdata::HintData;
-
 use common::message::relativedirection::RelativeDirection;
 
-
-
+/// Détermine une liste de directions en fonction d'un angle donné.
+///
+/// L'angle est normalisé entre 0° et 360°, puis des priorités de direction sont définies.
+///
+/// # Paramètres
+/// - `angle`: L'angle reçu en degrés.
+///
+/// # Retourne
+/// - Un `Vec<RelativeDirection>` contenant les directions classées par ordre de priorité.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::direction_from_angle;
+/// use common::message::relativedirection::RelativeDirection;
+///
+/// let directions = direction_from_angle(30.0);
+/// assert_eq!(directions[0], RelativeDirection::Front);
+/// ```
 pub fn direction_from_angle(angle: f32) -> Vec<RelativeDirection> {
     let normalized_angle = ((angle % 360.0) + 360.0) % 360.0;
     println!("🧭 [INFO] Angle normalisé : {:.2}°", normalized_angle);
@@ -29,6 +44,22 @@ pub fn direction_from_angle(angle: f32) -> Vec<RelativeDirection> {
     }
 }
 
+/// Détermine une liste de directions en fonction de la taille d'une grille.
+///
+/// # Paramètres
+/// - `grid_size`: Option contenant le nombre de colonnes et de lignes de la grille.
+///
+/// # Retourne
+/// - Un `Vec<RelativeDirection>` indiquant la priorité des directions.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::direction_from_grid_size;
+/// use common::message::relativedirection::RelativeDirection;
+///
+/// let directions = direction_from_grid_size(Some((10, 5)));
+/// assert_eq!(directions[0], RelativeDirection::Right);
+/// ```
 pub fn direction_from_grid_size(grid_size: Option<(u32, u32)>) -> Vec<RelativeDirection> {
     if let Some((cols, rows)) = grid_size {
         if cols > rows {
@@ -59,14 +90,36 @@ pub fn direction_from_grid_size(grid_size: Option<(u32, u32)>) -> Vec<RelativeDi
     }
 }
 
+/// Gère les indices (`HintData`) reçus et met à jour les informations partagées.
+///
+/// Cette fonction met à jour la boussole, la taille de la grille et détermine le leader si nécessaire.
+///
+/// # Paramètres
+/// - `player_id`: L'identifiant du joueur.
+/// - `hint_data`: L'indice reçu.
+/// - `shared_compass`: Référence partagée pour stocker l'angle de la boussole.
+/// - `leader_id`: Référence partagée pour stocker l'identifiant du leader.
+/// - `shared_grid_size`: Référence partagée pour stocker la taille de la grille.
+///
+/// # Exemple
+/// ```
+/// use std::sync::{Arc, Mutex};
+/// use ma_lib::handle_hint;
+/// use common::message::hintdata::HintData;
+///
+/// let compass = Arc::new(Mutex::new(None));
+/// let leader_id = Arc::new(Mutex::new(None));
+/// let grid_size = Arc::new(Mutex::new(None));
+///
+/// let hint = HintData::RelativeCompass { angle: 90.0 };
+/// handle_hint(1, &hint, &compass, &leader_id, &grid_size);
+/// ```
 pub fn handle_hint(
     player_id: u32,
     hint_data: &HintData,
-
     shared_compass: &Arc<Mutex<Option<f32>>>,
     leader_id: &Arc<Mutex<Option<u32>>>,
     shared_grid_size: &Arc<Mutex<Option<(u32, u32)>>>
-
 ) {
     match hint_data {
         HintData::RelativeCompass { angle } => {
@@ -79,15 +132,12 @@ pub fn handle_hint(
             *compass = Some(*angle);
             println!("🧭 [INFO] Boussole partagée mise à jour : {:.2}°", angle);
 
-
             let mut leader = leader_id.lock().unwrap();
             if leader.is_none() || leader.unwrap() != player_id {
                 println!("👑 [LEADER] Le joueur {} devient le leader.", player_id);
                 *leader = Some(player_id);
             }
-
         }
-
 
         HintData::GridSize { columns, rows } => {
             println!(
@@ -97,18 +147,11 @@ pub fn handle_hint(
             let mut grid_size = shared_grid_size.lock().unwrap();
             *grid_size = Some((*columns, *rows));
             println!("🗺️ [INFO] GridSize partagée mise à jour : {}x{}", columns, rows);
-
         }
-
-
 
         HintData::SOSHelper => {
             println!("🆘 [INFO] SOS reçu pour le joueur {}", player_id);
-
-
-
-            return ;
-
+            return;
         }
         _ => {}
     }

@@ -4,6 +4,7 @@ use crate::message::hintdata::HintData;
  use crate::message::registerteam::{RegisterTeam, RegisterTeamResult};
 use crate::message::subscribeplayer::{SubscribePlayer, SubscribePlayerResult};
 use serde::{Deserialize, Serialize};
+use crate::message::actionerror::ActionError;
 
 pub enum MessageData {
     RegisterTeam {
@@ -16,17 +17,8 @@ pub enum MessageData {
     Hint(HintData),
     Action(ActionData),
     Challenge(ChallengeData),
-    RadarViewResult(String),
 }
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum ActionError {
-    CannotPassThroughWall,
-    CannotPassThroughOpponent,
-    NoRunningChallenge,
-    SolveChallengeFirst,
-    InvalidChallengeSolution,
-}
+
 
 #[derive(Serialize, Deserialize, Debug)]
 

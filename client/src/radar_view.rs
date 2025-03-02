@@ -9,29 +9,12 @@ use common::message::actiondata::{ActionData, PlayerAction};
 use common::message::Message;
 use common::message::relativedirection::RelativeDirection;
 use common::utils::utils::send_message;
-use crate::decrypte::{decode_and_format, is_passage_open, DecodedView, RadarCell};
+use crate::decrypte::{is_passage_open, DecodedView, RadarCell};
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 
 
 
 
-pub fn calculate_position(player_id: u32, radar_data: &DecodedView) -> (i32, i32) {
-
-    let x = player_id as i32 % 10;
-    let y = (player_id as i32 / 10) % 10;
-    (x, y)
-}
-
-pub fn determine_leader(player_id: u32, leader_id: &Arc<Mutex<Option<u32>>>) -> bool {
-    let mut leader_locked = leader_id.lock().unwrap();
-    if leader_locked.is_none() {
-        println!("👑 [LEADER] Le joueur {} devient temporairement leader.", player_id);
-        *leader_locked = Some(player_id);
-        true
-    } else {
-        leader_locked.map_or(false, |id| id == player_id)
-    }
-}
 pub fn choose_least_visited_direction(
     player_id: u32,
     radar_data: &DecodedView,
@@ -163,12 +146,6 @@ pub fn leader_choose_action(
     choose_least_visited_direction(player_id, radar_data, tracker, position_tracker)
 }
 
-
-pub fn save_leader_action(shared_leader_action: &Arc<Mutex<Option<ActionData>>>, action: &ActionData) {
-    let mut leader_action_locked = shared_leader_action.lock().unwrap();
-    *leader_action_locked = Some(action.clone());
-}
-
 pub fn follower_choose_action(
     player_id: u32,
     radar_data: &DecodedView,
@@ -207,35 +184,11 @@ pub fn send_action(
     }).unwrap();
 
     if let Err(e) = send_message(stream, &Message::Action(action)) {
-        warn!("🔄 Tentative de reconnexion dans 2 secondes...");
+        warn!("🔄 Tentative de reconnexion dans 2 secondes... {:?}",e);
         thread::sleep(Duration::from_secs(2));
     }
 }
-pub fn estimate_position_from_walls(
-    position: (i32, i32),
-    grid_size: (u32, u32)
-) -> (i32, i32) {
-    let (cols, rows) = grid_size;
 
-    let estimated_x = if position.0 < 5 {
-        0
-    } else if position.0 > (cols as i32 - 5) {
-        cols as i32 - 1
-    } else {
-        position.0
-    };
-
-    let estimated_y = if position.1 < 5 {
-        0
-    } else if position.1 > (rows as i32 - 5) {
-        rows as i32 - 1
-    } else {
-        position.1
-    };
-
-    println!("📍 [INFO] Position estimée : ({}, {})", estimated_x, estimated_y);
-    (estimated_x, estimated_y)
-}
 
 pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<RelativeDirection>) -> Option<RelativeDirection> {
     for direction in directions {
@@ -284,7 +237,7 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
     let front_cell = &radar.cells[1];
     let right_cell = &radar.cells[5];
     let left_cell = &radar.cells[3];
-    println!("radar recu {:?}",radar);
+    println!("radar reçu {:?}",radar);
 
     println!(
         "🔍 [DEBUG] Vérification des cellules : Front={:?}, Right={:?}, Left={:?}",
@@ -345,7 +298,7 @@ pub fn compute_absolute_position(current_pos: (i32, i32), cell_index: usize) -> 
         5 => (current_pos.0 + 1, current_pos.1),     // Droite
         6 => (current_pos.0 - 1, current_pos.1 + 1), // Bas gauche
         7 => (current_pos.0, current_pos.1 + 1),     // Bas
-        8 => (current_pos.0 + 1, current_pos.1 + 1), // Bas droite
+        8 => (current_pos.0 + 1, current_pos.1 + 1), // Bas droit
         _ => current_pos,
     }
 }
@@ -377,16 +330,6 @@ pub fn detect_near_border(
 
     directions
 }
-pub fn assign_exploration_zone(player_id: u32, grid_size: (u32, u32)) -> (i32, i32) {
-    let num_sectors_x = grid_size.0 / 5;
-    let num_sectors_y = grid_size.1 / 5;
-
-    let x_zone = (player_id % 5) as i32 * num_sectors_x as i32;
-    let y_zone = (player_id / 5) as i32 * num_sectors_y as i32;
-
-    println!("🗺️ [INFO] Joueur {} est assigné à la zone ({}, {})", player_id, x_zone, y_zone);
-    (x_zone, y_zone)
-}
 
 
 pub fn find_path_to_exit(
@@ -401,15 +344,15 @@ pub fn find_path_to_exit(
 
     if dx.abs() > dy.abs() {
         if dx > 0 {
-            return Some(RelativeDirection::Right);
+             Some(RelativeDirection::Right)
         } else {
-            return Some(RelativeDirection::Left);
+             Some(RelativeDirection::Left)
         }
     } else {
         if dy > 0 {
-            return Some(RelativeDirection::Back);
+             Some(RelativeDirection::Back)
         } else {
-            return Some(RelativeDirection::Front);
+             Some(RelativeDirection::Front)
         }
     }
 }

@@ -135,7 +135,7 @@ use crate::decrypte::{RadarCell};
 }
 
 fn game_coordinator(rx: Receiver<PlayerAction>, player_count: u32) {
-    let mut active_players = player_count;
+    let active_players = player_count;
 
     while active_players > 0 {
         if let Ok(action) = rx.recv() {

@@ -7,6 +7,7 @@ pub mod message {
     pub mod relativedirection;
     pub mod subscribeplayer;
 
+    pub mod actionerror;
     pub mod radar_view;
 
     pub use message::{Message, MessageData};

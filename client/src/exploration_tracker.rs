@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+/*use std::collections::HashMap;
 
 pub struct ExplorationTracker {
     pub visited_positions: HashMap<(i32, i32), usize>,
@@ -24,4 +23,4 @@ impl ExplorationTracker {
     pub fn reset(&mut self) {
         self.visited_positions.clear();
     }
-}
+}*/
