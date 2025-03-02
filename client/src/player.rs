@@ -16,6 +16,7 @@ use crate::radar_view::{compute_absolute_position, decide_action, follower_choos
 
 pub struct Player {}
 
+
 pub fn handle_player(
     player_id: u32,
     token: String,
