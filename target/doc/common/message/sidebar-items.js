@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["actiondata","actionerror","challengedata","hintdata","message","radar_view","registerteam","relativedirection","subscribeplayer"]};

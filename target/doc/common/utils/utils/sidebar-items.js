@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["build_message","handle_response","process_message","receive_response","send_message"]};

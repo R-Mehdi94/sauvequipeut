@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["direction_from_angle","direction_from_grid_size","handle_hint"]};

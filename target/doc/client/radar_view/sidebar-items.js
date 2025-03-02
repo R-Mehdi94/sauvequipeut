@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["choose_accessible_direction","choose_least_visited_direction","compute_absolute_position","decide_action","detect_near_border","find_path_to_exit","follow_leader_direction","follower_choose_action","leader_choose_action","send_action","simulate_movement","update_player_position"]};
