@@ -23,6 +23,9 @@ use std::{net::TcpStream, thread, time};
 ///     Err(err) => eprintln!("Échec de la connexion : {:?}", err),
 /// }
 /// ```
+
+
+
 pub fn connect_to_server(addr: &str, port: &str) -> Result<TcpStream, MyError> {
     let full_addr = format!("{}:{}", addr, port);
 

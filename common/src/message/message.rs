@@ -48,6 +48,11 @@ pub enum MessageData {
 
     /// Contient un **challenge** à résoudre.
     Challenge(ChallengeData),
+
+    RadarView(String),
+    SubscribePlayerResult(SubscribePlayerResult),
+
+
 }
 
 /// Représente un **message** échangé dans le système.
@@ -86,6 +91,8 @@ pub enum Message {
     /// Message pour inscrire un joueur.
     SubscribePlayer(SubscribePlayer),
 
+    SubscribePlayerResultClient(SubscribePlayer),
+
     /// Contient un **indice** reçu.
     Hint(HintData),
 
@@ -97,6 +104,7 @@ pub enum Message {
 
     /// Résultat d'une **vue radar**, représentée sous forme de chaîne de caractères.
     RadarViewResult(String),
+    RadarView(String),
 
     /// Indique une **erreur lors d'une action**.
     ActionError(ActionError),

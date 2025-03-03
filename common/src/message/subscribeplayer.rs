@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 pub struct SubscribePlayer {
     /// Nom du joueur à inscrire.
     pub name: String,
-
     /// Jeton d'inscription unique fourni lors de l'enregistrement de l'équipe.
     pub registration_token: String,
 }

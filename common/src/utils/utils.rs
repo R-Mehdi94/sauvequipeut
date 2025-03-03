@@ -27,9 +27,13 @@ use crate::message::hintdata::HintData;
 /// let message_data = MessageData::RegisterTeam { name: "Team A".to_string() };
 /// let message = build_message(message_data).unwrap();
 /// ```
+
+pub struct Player {
+    pub name :String, pub register_token: String}
+
 pub fn build_message(data: MessageData) -> Result<Message, MyError> {
     match data {
-        MessageData::RegisterTeam { name } => Ok(Message::RegisterTeam(RegisterTeam { name })),
+        MessageData::RegisterTeam { name } => Ok(Message::RegisterTeam(RegisterTeam { name})),
         MessageData::SubscribePlayer {
             name,
             registration_token,
@@ -40,6 +44,9 @@ pub fn build_message(data: MessageData) -> Result<Message, MyError> {
         MessageData::Hint(hint) => Ok(Message::Hint(hint)),
         MessageData::Action(action) => Ok(Message::Action(action)),
         MessageData::Challenge(challenge) => Ok(Message::Challenge(challenge)),
+        MessageData::RadarView(radar) => Ok(Message::RadarView(radar)),
+        MessageData::SubscribePlayerResult(result) => Ok(Message::SubscribePlayerResult(result)),
+
     }
 }
 

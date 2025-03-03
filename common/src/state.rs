@@ -1,4 +1,5 @@
 use crate::message::{RegisterTeamSuccess, SubscribePlayer};
+use crate::utils::utils::Player;
 
 /// Représente l'état actuel du client du jeu.
 ///
@@ -42,6 +43,7 @@ pub struct ClientState {
 
     /// Liste des joueurs actuellement inscrits.
     pub subscribed_players: Vec<SubscribePlayer>,
+    pub players: Vec<Player>,
 
     /// Dernière vue radar reçue sous forme de chaîne de caractères.
     ///
