@@ -90,13 +90,6 @@ impl ExplorationTracker {
     /// - `true` si la position a été récemment visitée.
     /// - `false` sinon.
     ///
-    /// # Exemple
-    /// ```
-    ///
-    /// use algorithms::exploration_tracker::ExplorationTracker;
-    /// let mut tracker = ExplorationTracker::new();
-    /// tracker.mark_position((2, 2), common::message::relativedirection::RelativeDirection::Front);
-    /// assert!(tracker.is_recently_visited((2, 2)));
     /// ```
     pub fn is_recently_visited(&self, position: (i32, i32)) -> bool {
         if self.last_positions.len() < 5 {

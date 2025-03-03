@@ -16,6 +16,7 @@
 /// assert!(decoded.is_ok());
 /// ```
 pub fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
+
     let char_to_value = |c: char| -> Result<u8, String> {
         match c {
             'a'..='z' => Ok(c as u8 - b'a'),
@@ -243,3 +244,84 @@ pub fn is_passage_open(passage: u32, bit_index: usize) -> bool {
         }
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use crate::decrypte::{custom_decode, decode_and_format, DecodedView, RadarCell};
+
+    /// Teste le décodage de caractères valides.
+    #[test]
+    fn test_custom_decode_valid() {
+        let decoded = custom_decode("aBcD").unwrap();
+        assert_eq!(decoded.len(), 3); // Vérifie qu'on obtient bien 3 octets
+    }
+
+    /// Teste la gestion des caractères invalides.
+    #[test]
+    fn test_custom_decode_invalid_character() {
+        let decoded = custom_decode("aBc#");
+        assert!(decoded.is_err()); // Doit renvoyer une erreur
+    }
+
+    /// Teste la conversion des bits en `RadarCell`.
+    #[test]
+    fn test_radar_cell_from_bits() {
+        assert_eq!(RadarCell::from_bits("0000"), RadarCell::Open);
+        assert_eq!(RadarCell::from_bits("1000"), RadarCell::Exit);
+        assert_eq!(RadarCell::from_bits("1111"), RadarCell::Undefined);
+        assert_eq!(RadarCell::from_bits("0101"), RadarCell::Unknown("0101".to_string()));
+    }
+
+    /// Teste l'initialisation par défaut de `DecodedView`.
+    #[test]
+    fn test_decoded_view_default() {
+        let view = DecodedView::default();
+        assert_eq!(view.horizontal_passages, [0; 4]);
+        assert_eq!(view.vertical_passages, [0; 3]);
+        assert_eq!(view.cells.len(), 9);
+        assert_eq!(view.cells[0], RadarCell::Undefined);
+    }
+
+    #[test]
+    fn test_result_decoded() {
+        let input = "ieysGjGO8papd/a";
+        let test = decode_and_format(input).unwrap();
+
+        assert_eq!(test.get_horizontal_passage(0), 0b000100);
+        assert_eq!(test.get_horizontal_passage(1), 0b100100);
+        assert_eq!(test.get_horizontal_passage(2), 0b011000);
+        assert_eq!(test.get_horizontal_passage(3), 0b100000);
+
+        assert_eq!(test.get_vertical_passage(0), 0b00101000);
+        assert_eq!(test.get_vertical_passage(1), 0b10011000);
+        assert_eq!(test.get_vertical_passage(2), 0b10000000);
+    }
+    #[test]
+    fn test_custom_decode_special_chars() {
+        let decoded = custom_decode("+//+").unwrap();
+        assert_eq!(decoded.len(), 3); // Doit réussir et donner 3 octets
+    }
+
+    #[test]
+    fn test_decoded_view_structure() {
+        let input = "ieysGjGO8papd/a";
+        let decoded = decode_and_format(input).unwrap();
+
+        assert_eq!(decoded.cells.len(), 9); // Vérifie qu'on a bien 9 cellules
+        assert!(matches!(decoded.cells[0], RadarCell::Undefined | RadarCell::Open | RadarCell::Exit)); // Vérifie le premier élément
+    }
+
+    #[test]
+    fn test_radar_cells_correctness() {
+        let input = "ieysGjGO8papd/a";
+        let decoded = decode_and_format(input).unwrap();
+
+        assert_eq!(decoded.cells[0], RadarCell::Undefined);
+        assert_eq!(decoded.cells[4], RadarCell::Open); // Position centrale (le joueur)
+    }
+
+
+}
+
