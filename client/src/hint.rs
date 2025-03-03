@@ -4,7 +4,24 @@ use common::message::hintdata::HintData;
 use common::message::relativedirection::RelativeDirection;
 
 
-
+/// Détermine une liste de directions en fonction d'un angle donné.
+///
+/// L'angle est **normalisé** entre 0° et 360° avant de classer les directions par ordre de priorité.
+///
+/// # Paramètres
+/// - `angle`: L'angle donné en degrés (peut être négatif ou supérieur à 360°).
+///
+/// # Retourne
+/// - Un `Vec<RelativeDirection>` contenant les directions triées par priorité.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::direction_from_angle;
+/// use common::message::relativedirection::RelativeDirection;
+///
+/// let directions = direction_from_angle(30.0);
+/// assert_eq!(directions[0], RelativeDirection::Front);
+/// ```
 pub fn direction_from_angle(angle: f32) -> Vec<RelativeDirection> {
     let normalized_angle = ((angle % 360.0) + 360.0) % 360.0;
     println!("🧭 [INFO] Angle normalisé : {:.2}°", normalized_angle);
@@ -29,6 +46,25 @@ pub fn direction_from_angle(angle: f32) -> Vec<RelativeDirection> {
     }
 }
 
+/// Détermine une liste de directions en fonction de la **taille du labyrinthe**.
+///
+/// - Si la grille est **plus large** que haute, les déplacements horizontaux sont favorisés.
+/// - Si la grille est **plus haute** que large, les déplacements verticaux sont favorisés.
+///
+/// # Paramètres
+/// - `grid_size`: Option contenant le nombre de **colonnes** et de **lignes**.
+///
+/// # Retourne
+/// - Un `Vec<RelativeDirection>` contenant les directions triées par priorité.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::direction_from_grid_size;
+/// use common::message::relativedirection::RelativeDirection;
+///
+/// let directions = direction_from_grid_size(Some((10, 5)));
+/// assert_eq!(directions[0], RelativeDirection::Right);
+/// ```
 pub fn direction_from_grid_size(grid_size: Option<(u32, u32)>) -> Vec<RelativeDirection> {
     if let Some((cols, rows)) = grid_size {
         if cols > rows {
@@ -59,6 +95,33 @@ pub fn direction_from_grid_size(grid_size: Option<(u32, u32)>) -> Vec<RelativeDi
     }
 }
 
+
+/// Gère un indice (`HintData`) et met à jour les informations partagées.
+///
+/// - **Boussole** : Met à jour l'orientation vers la sortie et assigne un leader.
+/// - **Taille du labyrinthe** : Met à jour la taille de la grille.
+/// - **SOS** : Informe que le joueur a demandé de l'aide.
+///
+/// # Paramètres
+/// - `player_id`: Identifiant du joueur recevant l'indice.
+/// - `hint_data`: L'indice reçu.
+/// - `shared_compass`: Référence partagée pour stocker **l'angle de la boussole**.
+/// - `leader_id`: Référence partagée pour stocker **l'identifiant du leader**.
+/// - `shared_grid_size`: Référence partagée pour stocker **la taille de la grille**.
+///
+/// # Exemple
+/// ```
+/// use std::sync::{Arc, Mutex};
+/// use ma_lib::handle_hint;
+/// use common::message::hintdata::HintData;
+///
+/// let compass = Arc::new(Mutex::new(None));
+/// let leader_id = Arc::new(Mutex::new(None));
+/// let grid_size = Arc::new(Mutex::new(None));
+///
+/// let hint = HintData::RelativeCompass { angle: 90.0 };
+/// handle_hint(1, &hint, &compass, &leader_id, &grid_size);
+/// ```
 pub fn handle_hint(
     player_id: u32,
     hint_data: &HintData,
@@ -88,7 +151,6 @@ pub fn handle_hint(
 
         }
 
-
         HintData::GridSize { columns, rows } => {
             println!(
                 "🗺️ [INFO] Grille reçue: {} colonnes x {} lignes.",
@@ -100,13 +162,8 @@ pub fn handle_hint(
 
         }
 
-
-
         HintData::SOSHelper => {
             println!("🆘 [INFO] SOS reçu pour le joueur {}", player_id);
-
-
-
             return ;
 
         }

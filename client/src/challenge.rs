@@ -87,8 +87,6 @@ pub fn handle_challenge(
                 return;
             }
 
-
-
         }
         _ => println!("️ [INFO] Challenge non supporté."),
     }

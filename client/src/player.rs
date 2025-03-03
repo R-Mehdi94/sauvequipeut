@@ -14,9 +14,45 @@ use crate::decrypte::{decode_and_format, RadarCell};
 use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{ handle_hint};
 use crate::radar_view::{ choose_least_visited_direction, compute_absolute_position, decide_action,  follower_choose_action, leader_choose_action, send_action, update_player_position};
-
+/// Représente un joueur dans le système.
 pub struct Player {}
 
+/// Gère le cycle de vie d'un joueur.
+///
+/// Cette fonction prend en charge la **connexion au serveur**, l'**inscription du joueur**,
+/// la **gestion des messages**, et l'**exploration du labyrinthe**.
+///
+/// # Paramètres
+/// - `player_id`: Identifiant unique du joueur.
+/// - `token`: Jeton d'inscription du joueur.
+/// - `players`: Liste partagée des joueurs connectés.
+/// - `addr`: Adresse IP du serveur.
+/// - `port`: Port de connexion au serveur.
+/// - `tx`: Canal pour envoyer les actions des joueurs.
+/// - `team_secrets`: Gestionnaire des secrets de l'équipe.
+/// - `shared_compass`: Référence partagée de la boussole.
+/// - `leader_id`: Identifiant du leader actuel.
+/// - `shared_leader_action`: Dernière action du leader.
+/// - `shared_grid_size`: Taille partagée du labyrinthe.
+/// - `position_tracker`: Carte des positions des joueurs.
+/// - `visited_tracker`: Suivi des positions visitées.
+/// - `exit_position`: Position de la sortie si elle est détectée.
+/// - `labyrinth_map`: Carte du labyrinthe.
+///
+/// # Exemple
+/// ```no_run
+/// use std::sync::{Arc, Mutex};
+/// use std::collections::HashMap;
+/// use std::sync::mpsc::channel;
+/// use common::message::actiondata::PlayerAction;
+/// use crate::handle_player;
+///
+/// let (tx, _rx) = channel();
+/// let players = Arc::new(Mutex::new(Vec::new()));
+/// let position_tracker = Arc::new(Mutex::new(HashMap::new()));
+///
+/// handle_player(1, "token123".to_string(), &players, "127.0.0.1", "8080", tx, ...);
+/// ```
 pub fn handle_player(
     player_id: u32,
     token: String,

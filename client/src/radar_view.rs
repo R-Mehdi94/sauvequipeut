@@ -14,6 +14,23 @@ use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 
 
+/// Sélectionne la direction la **moins visitée** par le joueur pour explorer la carte.
+///
+/// # Paramètres
+/// - `player_id`: L'identifiant du joueur.
+/// - `radar_data`: Les données du radar pour détecter les passages accessibles.
+/// - `tracker`: L'objet qui suit les positions visitées.
+/// - `position_tracker`: La carte des positions actuelles des joueurs.
+///
+/// # Retourne
+/// - Une action `MoveTo` vers la direction la moins explorée.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::choose_least_visited_direction;
+/// use common::message::actiondata::ActionData;
+/// use common::message::relativedirection::RelativeDirection;
+/// ````
 pub fn choose_least_visited_direction(
     player_id: u32,
     radar_data: &DecodedView,
@@ -43,6 +60,29 @@ pub fn choose_least_visited_direction(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Simule un mouvement dans une direction pour estimer la **nouvelle position** du joueur.
+///
+/// # Paramètres
+/// - `player_id`: L'identifiant du joueur.
+/// - `direction`: La direction envisagée.
+/// - `position_tracker`: La carte des positions des joueurs.
+///
+/// # Retourne
+/// - `Option<(i32, i32)>` avec les nouvelles coordonnées du joueur si elles sont valides.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::simulate_movement;
+/// use common::message::relativedirection::RelativeDirection;
+/// use std::collections::HashMap;
+///
+/// let mut position_tracker = HashMap::new();
+/// position_tracker.insert(1, (5, 5));
+///
+/// let new_position = simulate_movement(1, RelativeDirection::Front, &position_tracker);
+/// assert_eq!(new_position, Some((5, 4)));
+/// ```
 pub fn simulate_movement(
     player_id: u32,
     direction: RelativeDirection,
@@ -65,6 +105,8 @@ pub fn simulate_movement(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 pub fn leader_choose_action(
     player_id: u32,
     radar_data: &DecodedView,
@@ -174,6 +216,26 @@ pub fn follower_choose_action(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Envoie une action au serveur et assure la **gestion des erreurs en cas de connexion interrompue**.
+///
+/// # Paramètres
+/// - `player_id`: L'identifiant du joueur.
+/// - `action`: L'action à envoyer.
+/// - `tx`: Un canal pour envoyer l'action localement.
+/// - `stream`: La connexion `TcpStream` vers le serveur.
+///
+/// # Exemple
+/// ```no_run
+/// use std::net::TcpStream;
+/// use std::sync::mpsc::channel;
+/// use ma_lib::{send_action, PlayerAction};
+/// use common::message::actiondata::ActionData;
+///
+/// let (tx, _rx) = channel();
+/// let mut stream = TcpStream::connect("127.0.0.1:8080").unwrap();
+/// send_action(1, ActionData::MoveTo(RelativeDirection::Front), &tx, &mut stream);
+/// ```
 pub fn send_action(
     player_id: u32,
     action: ActionData,
@@ -192,6 +254,26 @@ pub fn send_action(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Vérifie quelles **directions accessibles** sont disponibles à partir des données radar.
+///
+/// # Paramètres
+/// - `radar`: Vue radar actuelle du joueur.
+/// - `directions`: Liste des directions prioritaires.
+///
+/// # Retourne
+/// - `Some(RelativeDirection)` si une direction accessible est trouvée.
+/// - `None` si aucune direction n'est ouverte.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::choose_accessible_direction;
+/// use common::message::relativedirection::RelativeDirection;
+/// use crate::decrypte::DecodedView;
+///
+/// let radar = DecodedView::default();
+/// let direction = choose_accessible_direction(&radar, vec![RelativeDirection::Front]);
+/// ```
 pub fn choose_accessible_direction(radar: &DecodedView, directions: Vec<RelativeDirection>) -> Option<RelativeDirection> {
     for direction in directions {
         let accessible = match direction {
@@ -343,6 +425,29 @@ pub fn detect_near_border(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Trouve le **chemin vers la sortie** en fonction de la position actuelle du joueur.
+///
+/// # Paramètres
+/// - `player_id`: Identifiant du joueur.
+/// - `position_tracker`: Carte des positions des joueurs.
+/// - `exit_position`: Position de la sortie.
+///
+/// # Retourne
+/// - `Some(RelativeDirection)` si une direction vers la sortie est trouvée.
+/// - `None` sinon.
+///
+/// # Exemple
+/// ```
+/// use ma_lib::find_path_to_exit;
+/// use std::collections::HashMap;
+/// use common::message::relativedirection::RelativeDirection;
+///
+/// let mut position_tracker = HashMap::new();
+/// position_tracker.insert(1, (5, 5));
+///
+/// let direction = find_path_to_exit(1, &position_tracker, (7, 5));
+/// assert_eq!(direction, Some(RelativeDirection::Right));
+/// ```
 pub fn find_path_to_exit(
     player_id: u32,
     position_tracker: &HashMap<u32, (i32, i32)>,

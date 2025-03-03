@@ -24,6 +24,24 @@ use crate::challenge::TeamSecrets;
 use crate::decrypte::{ RadarCell};
 use crate::exploration_tracker::ExplorationTracker;
 
+/// Point d'entrée principal du programme.
+///
+/// Cette fonction :
+/// - **Se connecte au serveur** et inscrit l'équipe.
+/// - **Attend les joueurs** et démarre le jeu.
+/// - **Lance un thread pour chaque joueur**.
+/// - **Gère la coordination du jeu**.
+///
+/// # Retourne
+/// - `Ok(())` en cas de succès.
+/// - `Err(MyError)` en cas d'erreur de connexion.
+///
+/// # Exemple
+/// ```no_run
+/// fn main() -> Result<(), MyError> {
+///     main()
+/// }
+/// ```
 fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
 
@@ -86,8 +104,8 @@ fn main() -> Result<(), MyError> {
     println!("{}", "🏁 GO GO GO !");
     sleep(Duration::from_secs(2));
 
+    // 📌 Initialisation des variables partagées
     let players = Arc::new(Mutex::new(Vec::new()));
-
     let (tx, rx) = channel();
     let team_secrets = Arc::new(TeamSecrets::new());
     let shared_compass = Arc::new(Mutex::new(None));
@@ -99,7 +117,7 @@ fn main() -> Result<(), MyError> {
     let exit_position = Arc::new(Mutex::new(None));
     let labyrinth_map: Arc<Mutex<HashMap<(i32, i32), RadarCell>>> = Arc::new(Mutex::new(HashMap::new()));
 
-
+    // 🧑‍🤝‍🧑 Création des threads des joueurs
     let player_threads: Vec<_> = (0..expected_players)
         .map(|i| {
             let players = Arc::clone(&players);
@@ -136,6 +154,27 @@ fn main() -> Result<(), MyError> {
     Ok(())
 }
 
+
+/// Coordonne les actions du jeu en affichant les actions des joueurs.
+///
+/// Cette fonction :
+/// - Attend que les joueurs envoient leurs actions.
+/// - Affiche chaque action reçue.
+/// - Termine le jeu une fois que tous les joueurs ont terminé.
+///
+/// # Paramètres
+/// - `rx`: Récepteur pour écouter les actions des joueurs.
+/// - `player_count`: Nombre total de joueurs.
+///
+/// # Exemple
+/// ```no_run
+/// use std::sync::mpsc::channel;
+/// use ma_lib::game_coordinator;
+/// use common::message::actiondata::PlayerAction;
+///
+/// let (tx, rx) = channel();
+/// game_coordinator(rx, 2);
+/// ```
 fn game_coordinator(rx: Receiver<PlayerAction>, player_count: u32) {
     let active_players = player_count;
 

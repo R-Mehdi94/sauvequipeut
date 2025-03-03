@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RadarCell"],"fn":["custom_decode","decode_and_format","format_decoded","is_passage_open","parse_cells_part"],"struct":["DecodedView"]};
