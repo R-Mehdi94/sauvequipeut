@@ -9,11 +9,12 @@ use std::sync::{Arc, Mutex};
 use common::message::actionerror::ActionError;
 use common::message::challengedata::ChallengeData;
 use common::message::hintdata::HintData;
- use crate::challenge::{handle_challenge, TeamSecrets};
-use crate::decrypte::{decode_and_format, RadarCell};
-use crate::exploration_tracker::ExplorationTracker;
-use crate::hint::{ handle_hint};
-use crate::radar_view::{ choose_least_visited_direction, compute_absolute_position, decide_action,  follower_choose_action, leader_choose_action, send_action, update_player_position};
+ use algorithms::challenge::{handle_challenge, TeamSecrets};
+use algorithms::decrypte::{decode_and_format, RadarCell};
+use algorithms::exploration_tracker::ExplorationTracker;
+use algorithms::hint::{ handle_hint};
+use algorithms::radar_view::{choose_least_visited_direction, compute_absolute_position, decide_action, follower_choose_action, leader_choose_action, send_action, update_player_position};
+
 /// Représente un joueur dans le système.
 pub struct Player {}
 

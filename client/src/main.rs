@@ -1,12 +1,7 @@
-mod decrypte;
 mod player;
 mod utils;
-mod challenge;
-mod hint;
-mod radar_view;
-mod exploration_tracker;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use crate::player::handle_player;
 use crate::utils::connect_to_server;
 use common::message::actiondata::PlayerAction;
@@ -20,9 +15,9 @@ use std::{env, thread};
 use std::thread::sleep;
 use std::time::Duration;
 use env_logger::Env;
-use crate::challenge::TeamSecrets;
-use crate::decrypte::{ RadarCell};
-use crate::exploration_tracker::ExplorationTracker;
+use algorithms::decrypte::RadarCell;
+use algorithms::challenge::TeamSecrets;
+use algorithms::exploration_tracker::ExplorationTracker;
 
 /// Point d'entrée principal du programme.
 ///
