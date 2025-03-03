@@ -2,7 +2,7 @@ use crate::message::relativedirection::RelativeDirection;
 use serde::{Deserialize, Serialize};
 
 /// Représente les différentes actions qu'un joueur peut effectuer.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone,PartialEq)]
 pub enum ActionData {
     /// Déplace le joueur dans une direction relative.
     ///

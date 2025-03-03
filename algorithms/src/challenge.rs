@@ -91,3 +91,63 @@ pub fn handle_challenge(
         _ => println!("️ [INFO] Challenge non supporté."),
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::time::{Instant, Duration};
+    use std::thread::sleep;
+
+    #[test]
+    fn test_team_secrets_new() {
+        let team_secrets = TeamSecrets::new();
+        assert!(team_secrets.secrets.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_update_secret() {
+        let team_secrets = TeamSecrets::new();
+
+        team_secrets.update_secret(1, 42);
+
+        let secrets = team_secrets.secrets.lock().unwrap();
+        assert!(secrets.contains_key(&1));
+        assert_eq!(secrets.get(&1).unwrap().0, 42);
+    }
+
+    #[test]
+    fn test_calculate_sum_modulo() {
+        let team_secrets = TeamSecrets::new();
+
+        team_secrets.update_secret(1, 10);
+        team_secrets.update_secret(2, 15);
+        team_secrets.update_secret(3, 25);
+
+        let (result, _) = team_secrets.calculate_sum_modulo(7);
+        assert_eq!(result, (10 + 15 + 25) % 7); // 50 % 7 = 1
+
+        let (result, _) = team_secrets.calculate_sum_modulo(10);
+        assert_eq!(result, 50 % 10); // 50 % 10 = 0
+    }
+
+    #[test]
+    fn test_has_secret_updated_after() {
+        let team_secrets = TeamSecrets::new();
+
+        let before_update = Instant::now();
+        sleep(Duration::from_millis(10)); // Assure un léger décalage
+        team_secrets.update_secret(1, 99);
+
+        assert!(team_secrets.has_secret_updated_after(before_update)); // Doit être vrai
+
+        let after_update = Instant::now() + Duration::from_secs(10);
+        assert!(!team_secrets.has_secret_updated_after(after_update)); // Doit être faux
+    }
+
+
+
+
+
+}

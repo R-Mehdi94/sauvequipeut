@@ -170,3 +170,58 @@ pub fn handle_hint(
         _ => {}
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_direction_from_angle() {
+         assert_eq!(direction_from_angle(0.0), vec![RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back]);
+        assert_eq!(direction_from_angle(45.0), vec![RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back]);
+        assert_eq!(direction_from_angle(90.0), vec![RelativeDirection::Right, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Left]);
+        assert_eq!(direction_from_angle(135.0), vec![RelativeDirection::Right, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Left]);
+        assert_eq!(direction_from_angle(180.0), vec![RelativeDirection::Back, RelativeDirection::Left, RelativeDirection::Right, RelativeDirection::Front]);
+        assert_eq!(direction_from_angle(225.0), vec![RelativeDirection::Back, RelativeDirection::Left, RelativeDirection::Right, RelativeDirection::Front]);
+        assert_eq!(direction_from_angle(270.0), vec![RelativeDirection::Left, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Right]);
+        assert_eq!(direction_from_angle(315.0), vec![RelativeDirection::Left, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Right]);
+
+         assert_eq!(direction_from_angle(360.0), vec![RelativeDirection::Front, RelativeDirection::Right, RelativeDirection::Left, RelativeDirection::Back]);
+        assert_eq!(direction_from_angle(-45.0), vec![RelativeDirection::Left, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Right]); // -45° = 315°
+        assert_eq!(direction_from_angle(-90.0), vec![RelativeDirection::Left, RelativeDirection::Front, RelativeDirection::Back, RelativeDirection::Right]); // -90° = 270°
+    }
+
+}
+
+#[test]
+fn test_direction_from_grid_size() {
+     assert_eq!(direction_from_grid_size(Some((10, 5))), vec![
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+        RelativeDirection::Front,
+        RelativeDirection::Back,
+    ]);
+
+     assert_eq!(direction_from_grid_size(Some((5, 10))), vec![
+        RelativeDirection::Front,
+        RelativeDirection::Back,
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+    ]);
+
+     assert_eq!(direction_from_grid_size(Some((6, 6))), vec![
+        RelativeDirection::Front,
+        RelativeDirection::Back,
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+    ]);
+
+     assert_eq!(direction_from_grid_size(None), vec![
+        RelativeDirection::Front,
+        RelativeDirection::Right,
+        RelativeDirection::Left,
+        RelativeDirection::Back,
+    ]);
+}
+

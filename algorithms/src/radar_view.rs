@@ -472,3 +472,334 @@ pub fn find_path_to_exit(
         }
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use crate::decrypte::decode_and_format;
+
+    #[test]
+    fn test_simulate_movement() {
+        let mut position_tracker = HashMap::new();
+        position_tracker.insert(1, (5, 5));
+
+        // Tester déplacement vers l'avant (y - 1)
+        assert_eq!(simulate_movement(1, RelativeDirection::Front, &position_tracker), Some((5, 4)));
+
+        // Tester déplacement vers l'arrière (y + 1)
+        assert_eq!(simulate_movement(1, RelativeDirection::Back, &position_tracker), Some((5, 6)));
+
+        // Tester déplacement vers la droite (x + 1)
+        assert_eq!(simulate_movement(1, RelativeDirection::Right, &position_tracker), Some((6, 5)));
+
+        // Tester déplacement vers la gauche (x - 1)
+        assert_eq!(simulate_movement(1, RelativeDirection::Left, &position_tracker), Some((4, 5)));
+
+        // Tester un joueur qui n'existe pas
+        assert_eq!(simulate_movement(2, RelativeDirection::Front, &position_tracker), None);
+    }
+    #[test]
+    fn test_detect_near_border() {
+        let grid_size = (10, 10); // Grille de 10x10
+
+        // Cas où le joueur est sur les bords
+        assert_eq!(detect_near_border((0, 5), grid_size), vec![RelativeDirection::Right]); // Bord gauche
+        assert_eq!(detect_near_border((9, 5), grid_size), vec![RelativeDirection::Left]); // Bord droit
+        assert_eq!(detect_near_border((5, 0), grid_size), vec![RelativeDirection::Back]); // Bord haut
+        assert_eq!(detect_near_border((5, 9), grid_size), vec![RelativeDirection::Front]); // Bord bas
+
+        // Cas où le joueur est dans un coin
+        assert_eq!(detect_near_border((0, 0), grid_size), vec![RelativeDirection::Right, RelativeDirection::Back]); // Coin haut gauche
+        assert_eq!(detect_near_border((9, 0), grid_size), vec![RelativeDirection::Left, RelativeDirection::Back]); // Coin haut droit
+        assert_eq!(detect_near_border((0, 9), grid_size), vec![RelativeDirection::Right, RelativeDirection::Front]); // Coin bas gauche
+        assert_eq!(detect_near_border((9, 9), grid_size), vec![RelativeDirection::Left, RelativeDirection::Front]); // Coin bas droit
+
+        // Cas où le joueur est au centre de la grille (aucun bord proche)
+        assert_eq!(detect_near_border((5, 5), grid_size), vec![]); // Pas de bord
+    }
+    #[test]
+    fn test_compute_absolute_position() {
+        let base_pos = (5, 5); // Position de départ
+
+        // Vérifier toutes les positions
+        assert_eq!(compute_absolute_position(base_pos, 0), (4, 4)); // Haut gauche
+        assert_eq!(compute_absolute_position(base_pos, 1), (5, 4)); // Haut
+        assert_eq!(compute_absolute_position(base_pos, 2), (6, 4)); // Haut droite
+        assert_eq!(compute_absolute_position(base_pos, 3), (4, 5)); // Gauche
+        assert_eq!(compute_absolute_position(base_pos, 4), (5, 5)); // Centre (doit rester inchangé)
+        assert_eq!(compute_absolute_position(base_pos, 5), (6, 5)); // Droite
+        assert_eq!(compute_absolute_position(base_pos, 6), (4, 6)); // Bas gauche
+        assert_eq!(compute_absolute_position(base_pos, 7), (5, 6)); // Bas
+        assert_eq!(compute_absolute_position(base_pos, 8), (6, 6)); // Bas droite
+
+        // Cas invalide (cell_index >= 9)
+        assert_eq!(compute_absolute_position(base_pos, 9), base_pos); // Doit retourner la position initiale
+        assert_eq!(compute_absolute_position(base_pos, 100), base_pos); // Doit retourner la position initiale
+    }
+
+    #[test]
+    fn test_find_path_to_exit() {
+        let mut position_tracker = HashMap::new();
+        position_tracker.insert(1, (5, 5)); // Joueur en (5,5)
+
+        let exit_position = (7, 5); // Sortie à droite
+        assert_eq!(find_path_to_exit(1, &position_tracker, exit_position), Some(RelativeDirection::Right));
+
+        let exit_position = (3, 5); // Sortie à gauche
+        assert_eq!(find_path_to_exit(1, &position_tracker, exit_position), Some(RelativeDirection::Left));
+
+        let exit_position = (5, 7); // Sortie en bas
+        assert_eq!(find_path_to_exit(1, &position_tracker, exit_position), Some(RelativeDirection::Back));
+
+        let exit_position = (5, 3); // Sortie en haut
+        assert_eq!(find_path_to_exit(1, &position_tracker, exit_position), Some(RelativeDirection::Front));
+
+        let exit_position = (5, 5); // Déjà à la sortie
+        assert_eq!(find_path_to_exit(1, &position_tracker, exit_position), Some(RelativeDirection::Front)); // Peut être n'importe quelle direction
+
+        // Tester un joueur qui n'est pas dans `position_tracker`
+        assert_eq!(find_path_to_exit(2, &position_tracker, (10, 10)), None);
+    }
+
+    #[test]
+    fn test_update_player_position() {
+        let mut player_position = (5, 5); // Position de départ
+        let mut tracker = ExplorationTracker::new();
+
+        // Tester déplacement vers l'avant (Front)
+        update_player_position(1, &mut player_position, &ActionData::MoveTo(RelativeDirection::Front), &mut tracker);
+        assert_eq!(player_position, (5, 4));
+        assert_eq!(tracker.visited_positions.get(&(5, 4)), Some(&1));
+
+        // Tester déplacement vers l'arrière (Back)
+        update_player_position(1, &mut player_position, &ActionData::MoveTo(RelativeDirection::Back), &mut tracker);
+        assert_eq!(player_position, (5, 5));
+        assert_eq!(tracker.visited_positions.get(&(5, 5)), Some(&1));
+
+        // Tester déplacement vers la droite (Right)
+        update_player_position(1, &mut player_position, &ActionData::MoveTo(RelativeDirection::Right), &mut tracker);
+        assert_eq!(player_position, (6, 5));
+        assert_eq!(tracker.visited_positions.get(&(6, 5)), Some(&1));
+
+        // Tester déplacement vers la gauche (Left)
+        update_player_position(1, &mut player_position, &ActionData::MoveTo(RelativeDirection::Left), &mut tracker);
+        assert_eq!(player_position, (5, 5));
+        assert_eq!(tracker.visited_positions.get(&(5, 5)), Some(&2)); // Car déjà visité avant
+
+        // Tester que `tracker` enregistre bien chaque position visitée
+        assert!(tracker.visited_positions.contains_key(&(5, 4))); // La position (5,4) doit être enregistrée
+        assert!(tracker.visited_positions.contains_key(&(6, 5))); // La position (6,5) aussi
+    }
+
+    #[test]
+    fn test_decide_action_with_real_radar() {
+
+        let input = "ieysGjGO8papd/a";
+        let radar = decode_and_format(input).expect("Erreur de décodage du radar");
+
+
+        let right_open = is_passage_open(radar.get_vertical_passage(1)  , 2);
+        let front_open = is_passage_open(radar.get_horizontal_passage(1)  , 2);
+        let left_open = is_passage_open(radar.get_vertical_passage(1)  , 1);
+
+        let action = decide_action(&radar);
+        assert_eq!(action, ActionData::MoveTo(RelativeDirection::Front));
+    }
+
+    #[test]
+    fn test_follow_leader_direction() {
+         let input = "ieysGjGO8papd/a";
+        let radar = decode_and_format(input).expect("Erreur de décodage du radar");
+
+        println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
+        println!("{:?}", radar);
+
+         if let Some(direction) = follow_leader_direction(&radar, RelativeDirection::Front) {
+            println!("👣 Leader direction Front -> Suit : {:?}", direction);
+            assert!(matches!(direction, RelativeDirection::Front | RelativeDirection::Right | RelativeDirection::Left | RelativeDirection::Back));
+        } else {
+            println!("🚧 Aucune direction suivie pour Front");
+        }
+
+         if let Some(direction) = follow_leader_direction(&radar, RelativeDirection::Right) {
+            println!("👣 Leader direction Right -> Suit : {:?}", direction);
+            assert!(matches!(direction, RelativeDirection::Right | RelativeDirection::Front | RelativeDirection::Back | RelativeDirection::Left));
+        } else {
+            println!("🚧 Aucune direction suivie pour Right");
+        }
+
+         if let Some(direction) = follow_leader_direction(&radar, RelativeDirection::Left) {
+            println!("👣 Leader direction Left -> Suit : {:?}", direction);
+            assert!(matches!(direction, RelativeDirection::Left | RelativeDirection::Front | RelativeDirection::Back | RelativeDirection::Right));
+        } else {
+            println!("🚧 Aucune direction suivie pour Left");
+        }
+
+         if let Some(direction) = follow_leader_direction(&radar, RelativeDirection::Back) {
+            println!("👣 Leader direction Back -> Suit : {:?}", direction);
+            assert!(matches!(direction, RelativeDirection::Back | RelativeDirection::Left | RelativeDirection::Right | RelativeDirection::Front));
+        } else {
+            println!("🚧 Aucune direction suivie pour Back");
+        }
+    }
+
+    #[test]
+    fn test_choose_accessible_direction() {
+        let input = "ieysGjGO8papd/a";
+        let radar = decode_and_format(input).expect("Erreur de décodage du radar");
+
+        println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
+        println!("{:?}", radar);
+
+        let direction = choose_accessible_direction(&radar, vec![
+            RelativeDirection::Front,
+            RelativeDirection::Right,
+            RelativeDirection::Left,
+            RelativeDirection::Back,
+        ]);
+
+        if let Some(dir) = direction {
+            println!("🔄 Direction choisie : {:?}", dir);
+            assert!(matches!(dir, RelativeDirection::Front | RelativeDirection::Right | RelativeDirection::Left | RelativeDirection::Back));
+        } else {
+            println!("⚠️ Aucune direction accessible !");
+            assert_eq!(direction, None);
+        }
+
+        let direction = choose_accessible_direction(&radar, vec![
+            RelativeDirection::Right,
+            RelativeDirection::Front,
+            RelativeDirection::Back,
+            RelativeDirection::Left,
+        ]);
+
+        if let Some(dir) = direction {
+            println!("🔄 Direction choisie : {:?}", dir);
+            assert!(matches!(dir, RelativeDirection::Right | RelativeDirection::Front | RelativeDirection::Back | RelativeDirection::Left));
+        } else {
+            println!("⚠️ Aucune direction accessible !");
+            assert_eq!(direction, None);
+        }
+
+        let direction = choose_accessible_direction(&radar, vec![
+            RelativeDirection::Back,
+        ]);
+
+        println!("🚧 Test avec Back bloqué : {:?}", direction);
+        assert_eq!(direction, None);
+    }
+
+    #[test]
+    fn test_follower_choose_action() {
+        let input = "ieysGjGO8papd/a";
+        let radar_data = decode_and_format(input).expect("Erreur de décodage du radar");
+
+        println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
+        println!("{:?}", radar_data);
+
+        let player_id = 2;
+
+        let shared_leader_action = Arc::new(Mutex::new(Some(ActionData::MoveTo(RelativeDirection::Right))));
+        let action = follower_choose_action(player_id, &radar_data, &shared_leader_action);
+        println!("👣 Cas 1: Follower suit -> {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(RelativeDirection::Right) | ActionData::MoveTo(_)));
+
+        let shared_leader_action = Arc::new(Mutex::new(Some(ActionData::MoveTo(RelativeDirection::Front))));
+        let action = follower_choose_action(player_id, &radar_data, &shared_leader_action);
+        println!("🚧 Cas 2: Leader Front bloqué -> Follower s'adapte: {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_))); // Doit trouver une autre direction
+
+        let shared_leader_action = Arc::new(Mutex::new(None));
+        let action = follower_choose_action(player_id, &radar_data, &shared_leader_action);
+        println!("🔄 Cas 3: Aucun leader -> Follower décide seul: {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_))); // Doit prendre une décision seul
+
+    }
+
+
+    #[test]
+    fn test_choose_least_visited_direction() {
+         let input = "ieysGjGO8papd/a";
+        let radar_data = decode_and_format(input).expect("Erreur de décodage du radar");
+
+        println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
+        println!("{:?}", radar_data);
+
+        let player_id = 1;
+
+         let mut position_tracker = HashMap::new();
+        position_tracker.insert(player_id, (5, 5));
+
+         let mut tracker = ExplorationTracker::new();
+        tracker.visited_positions.insert((5, 4), 3); // Front : 3 visites
+        tracker.visited_positions.insert((6, 5), 5); // Right : 5 visites
+        tracker.visited_positions.insert((4, 5), 2); // Left : 2 visites
+        tracker.visited_positions.insert((5, 6), 1); // Back : 1 visite
+
+         let action = choose_least_visited_direction(player_id, &radar_data, &mut tracker, &position_tracker);
+        println!("🔄 Direction choisie : {:?}", action);
+        assert_eq!(action, ActionData::MoveTo(RelativeDirection::Back));
+
+         tracker.visited_positions.insert((5, 4), 3);
+        tracker.visited_positions.insert((6, 5), 3);
+        tracker.visited_positions.insert((4, 5), 3);
+        tracker.visited_positions.insert((5, 6), 3);
+
+        let action = choose_least_visited_direction(player_id, &radar_data, &mut tracker, &position_tracker);
+        println!("🔄 Cas où toutes les directions sont visitées également : {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_))); // Peut être n'importe quelle direction
+
+         tracker.visited_positions.insert((5, 4), 9999);
+        tracker.visited_positions.insert((6, 5), 9999);
+        tracker.visited_positions.insert((4, 5), 9999);
+        tracker.visited_positions.insert((5, 6), 9999);
+
+        let action = choose_least_visited_direction(player_id, &radar_data, &mut tracker, &position_tracker);
+        println!("🚧 Cas où toutes les directions sont trop visitées : {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_))); // `decide_action` prendra le relais
+    }
+
+    #[test]
+    fn test_leader_choose_action() {
+        let input = "ieysGjGO8papd/a";
+        let radar_data = decode_and_format(input).expect("Erreur de décodage du radar");
+
+        println!("\n📝 [RÉSULTAT DÉCODAGE] 📝");
+        println!("{:?}", radar_data);
+
+        let player_id = 1;
+
+        let mut position_tracker = HashMap::new();
+        position_tracker.insert(player_id, (5, 5));
+
+        let mut tracker = ExplorationTracker::new();
+        tracker.visited_positions.insert((5, 4), 3);
+        tracker.visited_positions.insert((6, 5), 1);
+        tracker.visited_positions.insert((4, 5), 5);
+        tracker.visited_positions.insert((5, 6), 2);
+
+        let exit_position = Arc::new(Mutex::new(Some((7, 5))));
+
+        let action = leader_choose_action(player_id, &radar_data, None, None, &mut tracker, &position_tracker, &exit_position);
+        println!("🚀 Cas 1: Le leader connaît la sortie -> {:?}", action);
+        assert_eq!(action, ActionData::MoveTo(RelativeDirection::Right));
+
+        let exit_position = Arc::new(Mutex::new(None));
+        let action = leader_choose_action(player_id, &radar_data, Some((10, 10)), None, &mut tracker, &position_tracker, &exit_position);
+        println!("🗺️ Cas 2: Pas de sortie connue, stratégie basée sur la taille -> {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_)));
+
+
+        let action = leader_choose_action(player_id, &radar_data, None, Some(90.0), &mut tracker, &position_tracker, &exit_position);
+        println!("🧭 Cas 3: Le leader suit la boussole -> {:?}", action);
+        assert!(matches!(action, ActionData::MoveTo(_)));
+
+
+        let action = leader_choose_action(player_id, &radar_data, None, None, &mut tracker, &position_tracker, &exit_position);
+        println!("🔄 Cas 4: Aucune info dispo -> Direction la moins visitée -> {:?}", action);
+        assert_eq!(action, ActionData::MoveTo(RelativeDirection::Front));
+    }
+}

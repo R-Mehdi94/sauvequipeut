@@ -99,3 +99,54 @@ impl ExplorationTracker {
         self.last_positions[..self.last_positions.len() - 1].contains(&position)
     }
 }
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_exploration_tracker_new() {
+        let tracker = ExplorationTracker::new();
+
+        assert!(tracker.visited_positions.is_empty());
+        assert!(tracker.last_positions.is_empty());
+        assert_eq!(tracker.last_direction, None);
+    }
+
+    #[test]
+    fn test_mark_position() {
+        let mut tracker = ExplorationTracker::new();
+
+        tracker.mark_position((2, 3), RelativeDirection::Front);
+        assert_eq!(tracker.visited_positions.get(&(2, 3)), Some(&1));
+        assert_eq!(tracker.last_positions, vec![(2, 3)]);
+        assert_eq!(tracker.last_direction, Some(RelativeDirection::Front));
+
+        for i in 0..10 {
+            tracker.mark_position((i, i), RelativeDirection::Right);
+        }
+        assert_eq!(tracker.last_positions.len(), 8); // Doit contenir max 8 éléments
+
+        assert!(!tracker.last_positions.contains(&(2, 3)));
+    }
+
+    #[test]
+    fn test_is_recently_visited() {
+        let mut tracker = ExplorationTracker::new();
+
+        assert_eq!(tracker.is_recently_visited((3, 4)), false);
+
+        tracker.mark_position((1, 1), RelativeDirection::Front);
+        tracker.mark_position((2, 2), RelativeDirection::Front);
+        tracker.mark_position((3, 3), RelativeDirection::Front);
+        tracker.mark_position((4, 4), RelativeDirection::Front);
+        tracker.mark_position((5, 5), RelativeDirection::Front);
+
+        assert_eq!(tracker.is_recently_visited((3, 3)), true);
+
+        assert_eq!(tracker.is_recently_visited((10, 10)), false);
+    }
+}
