@@ -1,6 +1,3 @@
-use std::fmt;
-
-
 fn custom_decode(input: &str) -> Result<Vec<u8>, String> {
     let char_to_value = |c: char| -> Result<u8, String> {
         match c {
@@ -76,7 +73,6 @@ fn parse_cells_part(cells_part: &str) -> Vec<RadarCell> {
     let mut cells = Vec::new();
     for i in 0..9 {
         let cell_bits = &cells_part[i * 4..(i + 1) * 4];
-        //  println!("🧩 Cellule {}: bits = {}", i, cell_bits); // 🔍 Trace par cellule
         cells.push(RadarCell::from_bits(cell_bits));
     }
     cells
@@ -86,75 +82,10 @@ impl DecodedView {
         self.horizontal_passages[index]
 
     }
-
-
-
     pub fn get_vertical_passage(&self, index: usize) -> u32 {
         self.vertical_passages[index]
     }
 
-
-
-    pub fn validate_data(&self) -> bool {
-        self.cells.len() == 9
-            && self.horizontal_passages.len() == 4
-            && self.vertical_passages.len() == 3
-    }
-
-
-
-
-}
-
-impl fmt::Display for DecodedView {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Passages horizontaux: {:08b} {:08b} {:08b}",
-            self.horizontal_passages[0], self.horizontal_passages[1], self.horizontal_passages[2]
-        )?;
-        writeln!(
-            f,
-            "=> {:08b} {:08b} {:08b} (inversion des octets, car écrit en little endian)",
-            self.horizontal_passages[2], self.horizontal_passages[1], self.horizontal_passages[0]
-        )?;
-        writeln!(
-            f,
-            "=> {:06b} {:06b} {:06b} {:06b} (4 lignes de 3 passages)\n",
-            self.horizontal_passages[2] >> 2,
-            ((self.horizontal_passages[2] & 0b11) << 4) | (self.horizontal_passages[1] >> 4),
-            ((self.horizontal_passages[1] & 0b1111) << 2) | (self.horizontal_passages[0] >> 6),
-            self.horizontal_passages[0] & 0b111111
-        )?;
-
-        writeln!(
-            f,
-            "Passages verticaux: {:08b} {:08b} {:08b}",
-            self.vertical_passages[0], self.vertical_passages[1], self.vertical_passages[2]
-        )?;
-        writeln!(
-            f,
-            "=> {:08b} {:08b} {:08b} (inversion des octets, car écrit en little endian)",
-            self.vertical_passages[2], self.vertical_passages[1], self.vertical_passages[0]
-        )?;
-        writeln!(
-            f,
-            "=> {:08b} {:08b} {:08b} (3 lignes de 4 passages)\n",
-            self.vertical_passages[2], self.vertical_passages[1], self.vertical_passages[0]
-        )?;
-
-
-
-        Ok(())
-    }
-}
-pub fn get_passage_type(bits: u8) -> &'static str {
-    match bits {
-        0b00 => "Undefined",
-        0b01 => "Open",
-        0b10 => "Wall",
-        _ => "Invalid",
-    }
 }
 
 

@@ -1,21 +1,19 @@
 use std::collections::HashMap;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 use log::warn;
-use rand::prelude::IndexedRandom;
 use common::message::actiondata::{ActionData, PlayerAction};
 use common::message::Message;
 use common::message::relativedirection::RelativeDirection;
 use common::utils::utils::send_message;
-use crate::decrypte::{decode_and_format, is_passage_open, DecodedView, RadarCell};
+use crate::decrypte::{is_passage_open, DecodedView, RadarCell};
 use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{direction_from_angle, direction_from_grid_size};
 
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn choose_least_visited_direction(
     player_id: u32,
     radar_data: &DecodedView,
@@ -187,7 +185,7 @@ pub fn send_action(
         action: action.clone(),
     }).unwrap();
 
-    if let Err(e) = send_message(stream, &Message::Action(action)) {
+    if let Err(_e) = send_message(stream, &Message::Action(action)) {
         warn!("🔄 Tentative de reconnexion dans 2 secondes...");
         thread::sleep(Duration::from_secs(2));
     }
@@ -243,7 +241,6 @@ pub fn decide_action(radar: &DecodedView) -> ActionData {
     let front_cell = &radar.cells[1];
     let right_cell = &radar.cells[5];
     let left_cell = &radar.cells[3];
-    let back_open = true;
     println!("radar recu {:?}",radar);
 
     println!(

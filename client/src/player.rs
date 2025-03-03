@@ -1,9 +1,6 @@
-use std::cmp::PartialEq;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use crate::utils::connect_to_server;
 use common::message::actiondata::{ActionData, PlayerAction};
-use common::message::relativedirection::RelativeDirection;
-use std::net::TcpStream;
 use common::message::{Message, MessageData};
 use common::state::ClientState;
 use common::utils::utils::{build_message, handle_response, receive_response, send_message};
@@ -18,18 +15,7 @@ use crate::exploration_tracker::ExplorationTracker;
 use crate::hint::{ handle_hint};
 use crate::radar_view::{ choose_least_visited_direction, compute_absolute_position, decide_action,  follower_choose_action, leader_choose_action, send_action, update_player_position};
 
-pub struct Player {
-    pub name: String,
-    pub registration_token: String,
-    pub stream: TcpStream,
-}
-
-fn extract_radar_from_response(response: &Message) -> Option<String> {
-    match response {
-        Message::RadarViewResult(encoded_radar) => Some(encoded_radar.clone()),
-        _ => None,
-    }
-}
+pub struct Player {}
 
 pub fn handle_player(
     player_id: u32,
@@ -59,11 +45,7 @@ pub fn handle_player(
     send_message(&mut stream, &subscribe_message).unwrap();
     handle_response(&mut stream, &mut ClientState::default()).unwrap();
 
-    let player = Player {
-        name: player_name.clone(),
-        registration_token: token.clone(),
-        stream: stream.try_clone().unwrap(),
-    };
+    let player = Player {};
 
     {
         let mut players_lock = players.lock().unwrap();

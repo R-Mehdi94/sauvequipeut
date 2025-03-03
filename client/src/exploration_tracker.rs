@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use common::message::relativedirection::RelativeDirection;
 
 pub struct ExplorationTracker {

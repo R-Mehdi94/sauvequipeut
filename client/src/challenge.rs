@@ -1,15 +1,11 @@
 use std::collections::HashMap;
-use std::error::Error;
-use std::io::Write;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
-use serde_json::json;
-use common::message::{Message, MessageData};
+use std::time::{Instant};
+use common::message::{MessageData};
 use common::message::actiondata::ActionData;
 use common::message::challengedata::ChallengeData;
 
-use common::utils::utils::{build_message, receive_response, send_message};
+use common::utils::utils::{build_message, send_message};
 
 
 pub struct TeamSecrets {
@@ -60,15 +56,15 @@ pub fn handle_challenge(
     match challenge_data {
         ChallengeData::SecretSumModulo(modulo) => {
             println!(" [INFO] Challenge SecretSumModulo reçu pour le joueur {} avec modulo {}", player_id, modulo);
-            let mut last_calculation_time = Instant::now();
+            let last_calculation_time = Instant::now();
 
-            let mut attempts = 0;
+            let attempts = 0;
 
 
             if secrets.has_secret_updated_after(last_calculation_time) {
                 println!(" [INFO] Mise à jour détectée avant recalcul.");
             }
-            let (mut answer, _) = secrets.calculate_sum_modulo(*modulo);
+            let (answer, _) = secrets.calculate_sum_modulo(*modulo);
             println!("premier calcule  Résultat (tentative {}): {}", attempts + 1, answer);
 
 

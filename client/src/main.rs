@@ -3,11 +3,10 @@ mod player;
 mod utils;
 mod challenge;
 mod hint;
-mod position;
 mod radar_view;
 mod exploration_tracker;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use crate::player::handle_player;
 use crate::utils::connect_to_server;
 use common::message::actiondata::PlayerAction;
@@ -17,7 +16,9 @@ use common::utils::my_error::MyError;
 use common::utils::utils::*;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{env, thread};
+use std::thread::sleep;
+use std::time::Duration;
 use env_logger::Env;
 use crate::challenge::TeamSecrets;
 use crate::decrypte::{ RadarCell};
@@ -25,14 +26,34 @@ use crate::exploration_tracker::ExplorationTracker;
 
 fn main() -> Result<(), MyError> {
     println!("Démarrage du client...");
-    let addr = "localhost";
-    let port = "8778";
+
+
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        eprintln!("Usage: client [server_address] [port (DEFAULT 8778)]");
+        return Ok(());
+    }
+
+    let addr = &args[1];
+    let mut port = "8778";
+    if args.len() == 3 {
+        port = &args[2];
+    }
+
+    //let addr = "localhost";
+    //let port = "8778";
+
 
     let mut stream = connect_to_server(addr, port)?;
 
     let mut state = ClientState::default();
 
-    let team_name = "curious_broccoli".to_string();
+    let mut line = String::new();
+    println!("Enter your team name :");
+    std::io::stdin().read_line(&mut line)?;
+    let team_name = line.trim().to_string();
+
     let message = build_message(MessageData::RegisterTeam { name: team_name })?;
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -48,6 +69,22 @@ fn main() -> Result<(), MyError> {
         println!("Erreur : aucune information d'équipe disponible.");
         return Ok(());
     };
+
+    println!("Nombre de joueurs : {}",expected_players);
+
+    sleep(Duration::from_secs(2));
+    println!("{}", "⚠️ Sortez vite du labyrinthe avant que...");
+    sleep(Duration::from_secs(5));
+
+    println!("La partie commence dans :");
+
+    for i in (0..3).rev() {
+        println!("{}", i+1 );
+        sleep(Duration::from_secs(1));
+    }
+
+    println!("{}", "🏁 GO GO GO !");
+    sleep(Duration::from_secs(2));
 
     let players = Arc::new(Mutex::new(Vec::new()));
 
@@ -100,7 +137,7 @@ fn main() -> Result<(), MyError> {
 }
 
 fn game_coordinator(rx: Receiver<PlayerAction>, player_count: u32) {
-    let mut active_players = player_count;
+    let active_players = player_count;
 
     while active_players > 0 {
         if let Ok(action) = rx.recv() {
